@@ -198,6 +198,7 @@ export const FISH_SPECIES: FishSpecies[] = [
       hardiness: 0.7
     },
     diet: FishDiet.CARNIVORE,
+    preySpecies: ['guppy'],
     schoolingFactor: 0.1,
     schoolingDistance: 100
   },
@@ -216,6 +217,7 @@ export const FISH_SPECIES: FishSpecies[] = [
       hardiness: 0.9
     },
     diet: FishDiet.CARNIVORE,
+    preySpecies: ['guppy', 'tropical'],
     schoolingFactor: 0.2,
     schoolingDistance: 80
   },

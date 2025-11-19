@@ -21,6 +21,7 @@ const GameCanvas: React.FC = () => {
     incrementStat,
     isSellMode,
     sellFish,
+    removeFish,
     waterParams,
     updateWaterParams
   } = useGameStore();
@@ -471,8 +472,8 @@ const GameCanvas: React.FC = () => {
 
             // Eat Prey
             if (minPreyDist < GAME_CONFIG.EAT_RADIUS) {
-              // Remove from store (sold = dead/gone)
-              sellFish(prey.id);
+              // Remove from store (no money for eaten fish)
+              removeFish(prey.id);
               // Remove locally immediately to prevent double-eating
               const idx = fishRef.current.findIndex(fi => fi.id === prey.id);
               if (idx > -1) fishRef.current.splice(idx, 1);
@@ -483,6 +484,26 @@ const GameCanvas: React.FC = () => {
               incrementStat('fishFedCount'); // Counts as feeding? Sure.
             }
           }
+        }
+
+        // --- Phase 2: Fleeing Logic (Prey Avoidance) ---
+        let fleeing = false;
+        if (!hunting) {
+            // Look for predators nearby
+            fishRef.current.forEach(p => {
+               const predatorSpecies = FISH_SPECIES.find(s => s.id === p.speciesId);
+               if (predatorSpecies?.diet === FishDiet.CARNIVORE && predatorSpecies.preySpecies?.includes(f.speciesId)) {
+                   const dist = Math.hypot(p.x - f.x, p.y - f.y);
+                   if (dist < 200) { // Fear radius
+                       fleeing = true;
+                       f.state = 'FLEEING';
+                       // Run away!
+                       const angle = Math.atan2(p.y - f.y, p.x - f.x);
+                       ax -= Math.cos(angle) * 0.4; // Flee fast
+                       ay -= Math.sin(angle) * 0.4;
+                   }
+               }
+            });
         }
 
 
@@ -540,7 +561,7 @@ const GameCanvas: React.FC = () => {
 
         // Limit Speed
         const speed = Math.hypot(f.vx, f.vy);
-        const maxSpeed = (f.state === 'SEEKING_FOOD' ? species.speed * 2 : species.speed);
+        const maxSpeed = ((f.state === 'SEEKING_FOOD' || f.state === 'FLEEING') ? species.speed * 2 : species.speed);
         if (speed > maxSpeed) {
           f.vx = (f.vx / speed) * maxSpeed;
           f.vy = (f.vy / speed) * maxSpeed;
@@ -557,7 +578,7 @@ const GameCanvas: React.FC = () => {
       // Remove dead fish (health <= 0)
       const deadFish = fishRef.current.filter(f => f.health <= 0);
       if (deadFish.length > 0) {
-        deadFish.forEach(f => sellFish(f.id)); // This will trigger store update -> useEffect sync
+        deadFish.forEach(f => removeFish(f.id)); // Dead fish give no money
       }
 
       // 6. Update & Draw Coins
@@ -613,7 +634,7 @@ const GameCanvas: React.FC = () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       window.removeEventListener('resize', handleResize);
     };
-  }, [addMoney, incrementStat, sellFish, updateWaterParams]); // Removed unstable dependencies
+  }, [addMoney, incrementStat, sellFish, removeFish, updateWaterParams]); // Removed unstable dependencies
 
   return (
     <canvas
