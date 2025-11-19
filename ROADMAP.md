@@ -13,7 +13,7 @@
 - [x] 10. Skill Tree / Research (Implemented)
 
 ## Phase 2: Gameplay Depth (Medium)
-- [ ] 11. Predation System
+- [x] 11. Predation System
 - [ ] 12. Schooling AI
 - [ ] 13. Plant Growth
 - [ ] 14. Algae System

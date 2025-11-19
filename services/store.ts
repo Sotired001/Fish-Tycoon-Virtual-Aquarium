@@ -53,6 +53,7 @@ interface GameState {
   toggleSettings: () => void;
   toggleSellMode: () => void;
   sellFish: (fishId: string) => void;
+  removeFish: (fishId: string) => void;
   breedFish: (parent1Id: string, parent2Id: string) => void;
   updateWaterParams: (params: Partial<WaterParams>) => void;
   prestigeReset: () => void;
@@ -434,6 +435,12 @@ export const useGameStore = create<GameState>()(
             fish: state.fish.filter(f => f.id !== fishId)
           };
         });
+      },
+
+      removeFish: (fishId) => {
+        set((state) => ({
+          fish: state.fish.filter(f => f.id !== fishId)
+        }));
       },
 
       breedFish: (parent1Id, parent2Id) => {
