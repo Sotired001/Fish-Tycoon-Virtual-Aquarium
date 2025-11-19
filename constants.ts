@@ -144,8 +144,8 @@ export const FISH_SPECIES: FishSpecies[] = [
       hardiness: 0.8
     },
     diet: FishDiet.OMNIVORE,
-    schoolingFactor: 0.3,
-    schoolingDistance: 60
+    schoolingFactor: 0.6, // Increased to make it visible
+    schoolingDistance: 80
   },
   {
     id: 'guppy',
@@ -162,8 +162,8 @@ export const FISH_SPECIES: FishSpecies[] = [
       hardiness: 0.6
     },
     diet: FishDiet.OMNIVORE,
-    schoolingFactor: 0.8,
-    schoolingDistance: 40
+    schoolingFactor: 1.5, // Strong schooling
+    schoolingDistance: 60
   },
   {
     id: 'tropical',

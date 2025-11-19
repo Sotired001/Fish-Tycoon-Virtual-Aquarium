@@ -56,6 +56,7 @@ interface GameState {
   removeFish: (fishId: string) => void;
   breedFish: (parent1Id: string, parent2Id: string) => void;
   updateWaterParams: (params: Partial<WaterParams>) => void;
+  setTimeOfDay: (time: number) => void;
   prestigeReset: () => void;
   loadFromSave: () => void;
 }
@@ -71,6 +72,7 @@ export const useGameStore = create<GameState>()(
       decorations: [], // Initial decorations
       quests: [],
       skills: {}, // Initial skills
+      timeOfDay: 12, // Start at noon
       currentBiomeId: 'default_biome',
       unlockedBiomeIds: ['default_biome'],
       waterParams: {
@@ -78,7 +80,8 @@ export const useGameStore = create<GameState>()(
         temperature: 25,
         ammonia: 0,
         nitrites: 0,
-        nitrates: 0
+        nitrates: 0,
+        algae: 0
       },
       upgrades: {
         foodQuality: 0,
@@ -333,7 +336,8 @@ export const useGameStore = create<GameState>()(
               itemId: itemId,
               x: 100 + Math.random() * 600, // Random placement for now
               y: 400 + Math.random() * 150, // Near bottom
-              scale: 1.0
+              scale: 1.0,
+              growth: decorationItem.type === 'PLANT' ? 0.1 : undefined // Plants start small
             };
 
             return {
@@ -527,6 +531,8 @@ export const useGameStore = create<GameState>()(
         });
       },
 
+      setTimeOfDay: (time) => set({ timeOfDay: time }),
+
       prestigeReset: () => {
         const { stats, achievements, gems } = get();
         const bonusGems = Math.floor(stats.totalCoinsEarned / 10000);
@@ -534,7 +540,7 @@ export const useGameStore = create<GameState>()(
         set({
           money: 0,
           fish: [],
-          waterParams: { ph: 7.0, temperature: 25, ammonia: 0, nitrites: 0, nitrates: 0 },
+          waterParams: { ph: 7.0, temperature: 25, ammonia: 0, nitrites: 0, nitrates: 0, algae: 0 },
           upgrades: { foodQuality: 0, autoFeeder: 0, magnet: 0, tankSize: 0, metabolism: 0 },
           prestige: get().prestige + 1,
           gems: gems + bonusGems,

@@ -11,6 +11,7 @@ export interface WaterParams {
   ammonia: number;   // ppm, 0 is best, > 1 is bad
   nitrites: number;  // ppm, 0 is best (not used yet, reserved)
   nitrates: number;  // ppm, < 40 is ok (not used yet, reserved)
+  algae: number;     // 0-100 coverage
 }
 
 // Simulation Entities (managed by Canvas Ref, not React State for perf)
@@ -81,6 +82,7 @@ export interface EntityDecoration {
   x: number;
   y: number;
   scale: number;
+  growth?: number; // 0-1 for Plants
 }
 
 export interface EntityFood {

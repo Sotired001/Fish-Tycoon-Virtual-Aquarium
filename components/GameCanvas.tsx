@@ -23,7 +23,9 @@ const GameCanvas: React.FC = () => {
     sellFish,
     removeFish,
     waterParams,
-    updateWaterParams
+    updateWaterParams,
+    timeOfDay,
+    setTimeOfDay
   } = useGameStore();
 
   // Use refs for high-frequency game entities to avoid React re-renders
@@ -33,6 +35,7 @@ const GameCanvas: React.FC = () => {
   const coinsRef = useRef<EntityCoin[]>([]);
   const particlesRef = useRef<EntityParticle[]>([]);
   const waterParamsRef = useRef({ ...waterParams }); // Local ref for simulation
+  const timeOfDayRef = useRef(timeOfDay);
 
   // Refs for store values to avoid restarting the loop
   const upgradesRef = useRef(upgrades);
@@ -46,7 +49,8 @@ const GameCanvas: React.FC = () => {
     skillsRef.current = skills;
     currentBiomeIdRef.current = currentBiomeId;
     isSellModeRef.current = isSellMode;
-  }, [upgrades, skills, currentBiomeId, isSellMode]);
+    timeOfDayRef.current = timeOfDay;
+  }, [upgrades, skills, currentBiomeId, isSellMode, timeOfDay]);
 
   // Sync Ref with Store when Store updates (e.g. bought fish, cured disease)
   useEffect(() => {
@@ -160,6 +164,15 @@ const GameCanvas: React.FC = () => {
       return;
     }
 
+    // Scrub Algae?
+    if (waterParamsRef.current.algae > 0) {
+      // Reduce algae
+      waterParamsRef.current.algae = Math.max(0, waterParamsRef.current.algae - 5);
+      updateWaterParams(waterParamsRef.current);
+      spawnParticle(x, y, 'BUBBLE');
+      return;
+    }
+
     // Normal Mode: Feed
     dropFood(x, y);
     spawnParticle(x, y, 'BUBBLE');
@@ -261,11 +274,54 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = currentBiome.waterColor;
       ctx.fillRect(0, 0, width, height);
 
+      // 1.15 Draw Algae Overlay
+      if (waterParamsRef.current.algae > 0) {
+         ctx.fillStyle = `rgba(34, 139, 34, ${waterParamsRef.current.algae / 200})`; // Max 0.5 alpha
+         ctx.fillRect(0, 0, width, height);
+      }
+
+      // 1.2 Draw Day/Night Cycle Overlay
+      const time = timeOfDayRef.current;
+      let darkness = 0.0;
+
+      // Night is 20:00 to 06:00
+      // Twilight 06:00-08:00 and 18:00-20:00
+      if (time >= 6 && time < 8) {
+         // Dawn
+         darkness = 0.5 - ((time - 6) / 2) * 0.5;
+      } else if (time >= 8 && time < 18) {
+         // Day
+         darkness = 0;
+      } else if (time >= 18 && time < 20) {
+         // Dusk
+         darkness = (time - 18) / 2 * 0.5;
+      } else {
+         // Night
+         darkness = 0.5;
+      }
+
+      if (darkness > 0) {
+         ctx.fillStyle = `rgba(0, 0, 20, ${darkness})`;
+         ctx.fillRect(0, 0, width, height);
+      }
+
       // 1.5 Draw Decorations (Background)
       decorationsRef.current.forEach(dec => {
         const item = DECORATIONS.find(d => d.id === dec.itemId);
         if (item) {
-          ctx.font = "40px serif";
+          // Plant Growth Logic
+          if (item.type === 'PLANT' && dec.growth !== undefined && dec.growth < 1.0) {
+             // Grow only during day (08:00 - 18:00)
+             const t = timeOfDayRef.current;
+             if (t >= 8 && t <= 18) {
+                dec.growth += 0.0001; // Slow growth
+             }
+          }
+
+          const growthScale = dec.growth !== undefined ? 0.5 + (dec.growth * 0.5) : 1;
+          const size = 40 * dec.scale * growthScale;
+
+          ctx.font = `${size}px serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "bottom";
           ctx.fillText(item.emoji, dec.x, dec.y);
@@ -283,20 +339,39 @@ const GameCanvas: React.FC = () => {
         }
       }
 
-      // 3. Update Water Params (Ammonia build up)
+      // 3. Update Water Params & Time
       waterUpdateTimerRef.current += deltaTime;
       if (waterUpdateTimerRef.current > 1000) { // Every second
         waterUpdateTimerRef.current = 0;
+
+        // Update Time (1 hour per 5 seconds -> 24 hours in 2 minutes)
+        // So 1 hour is 0.2 hours per second.
+        timeOfDayRef.current = (timeOfDayRef.current + 0.2) % 24;
+        setTimeOfDay(timeOfDayRef.current);
+
         // Ammonia increases by fish count
         const pollution = fishRef.current.length * 0.005;
 
         // Ammonia reduction from decorations
         const reduction = decorationsRef.current.reduce((acc, dec) => {
           const item = DECORATIONS.find(d => d.id === dec.itemId);
-          return acc + (item?.effect?.type === 'AMMONIA_REDUCTION' ? (item.effect.value || 0) : 0);
+          let val = (item?.effect?.type === 'AMMONIA_REDUCTION' ? (item.effect.value || 0) : 0);
+
+          // Scale effect by growth for plants
+          if (item?.type === 'PLANT' && dec.growth !== undefined) {
+             val *= dec.growth;
+          }
+          return acc + val;
         }, 0);
 
         waterParamsRef.current.ammonia = Math.min(10, Math.max(0, waterParamsRef.current.ammonia + pollution - reduction));
+
+        // Algae Growth
+        // Grows if ammonia > 1 and day time (8-18)
+        const time = timeOfDayRef.current;
+        if (waterParamsRef.current.ammonia > 1 && time >= 8 && time <= 18) {
+           waterParamsRef.current.algae = Math.min(100, waterParamsRef.current.algae + 0.1);
+        }
 
         // Sync back to store (debounced)
         updateWaterParams(waterParamsRef.current);
@@ -634,15 +709,20 @@ const GameCanvas: React.FC = () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       window.removeEventListener('resize', handleResize);
     };
-  }, [addMoney, incrementStat, sellFish, removeFish, updateWaterParams]); // Removed unstable dependencies
+  }, [addMoney, incrementStat, sellFish, removeFish, updateWaterParams, setTimeOfDay]); // Removed unstable dependencies
 
   return (
-    <canvas
-      ref={canvasRef}
-      className={`absolute top-0 left-0 w-full h-full touch-none ${isSellMode ? 'cursor-crosshair' : 'cursor-default'}`}
-      onMouseDown={handleCanvasClick}
-      onTouchStart={handleCanvasClick}
-    />
+    <>
+      <canvas
+        ref={canvasRef}
+        className={`absolute top-0 left-0 w-full h-full touch-none ${isSellMode ? 'cursor-crosshair' : 'cursor-default'}`}
+        onMouseDown={handleCanvasClick}
+        onTouchStart={handleCanvasClick}
+      />
+      <div className="absolute top-6 left-1/2 -translate-x-1/2 pointer-events-none select-none text-white/80 text-2xl font-bold drop-shadow-lg z-0">
+        ⏰ {Math.floor(timeOfDayRef.current || 12)}:00
+      </div>
+    </>
   );
 };
 

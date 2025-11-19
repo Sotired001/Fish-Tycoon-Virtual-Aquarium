@@ -14,10 +14,10 @@
 
 ## Phase 2: Gameplay Depth (Medium)
 - [x] 11. Predation System
-- [ ] 12. Schooling AI
-- [ ] 13. Plant Growth
-- [ ] 14. Algae System
-- [ ] 15. Day/Night Cycle
+- [x] 12. Schooling AI
+- [x] 13. Plant Growth
+- [x] 14. Algae System
+- [x] 15. Day/Night Cycle
 - [ ] 16. Equipment Upgrades
 - [ ] 17. Fish Personality Traits
 - [ ] 18. Live Food Culture

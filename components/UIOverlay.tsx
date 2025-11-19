@@ -80,7 +80,7 @@ const UIOverlay: React.FC = () => {
           <QuestBoard />
         </div>
 
-        <div className="flex gap-2 pointer-events-auto">
+        <div className="flex gap-2 pointer-events-auto mt-12 sm:mt-0">
           <button
             onClick={toggleShop}
             className="bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
