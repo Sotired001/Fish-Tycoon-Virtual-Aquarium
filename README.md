@@ -1,20 +1,90 @@
 <div align="center">
+
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+
+  <h1>Fish Tycoon: Virtual Aquarium</h2>
+
+  <p>A relaxing aquarium simulator built with React + Vite. Feed fish, upgrade your tank, breed species, and earn coins.</p>
+
 </div>
 
-# Run and deploy your AI Studio app
+---
 
-This contains everything you need to run your app locally.
+## Project overview
 
-View your app in AI Studio: https://ai.studio/apps/drive/1alxUlSpe0lX2KkjgU8r9q8dy-j2tJw0a
+Fish Tycoon is a canvas-driven aquarium game where players:
+- Feed fish using clicks/taps
+- Earn currency (coins) and spend it in the shop
+- Buy new species and upgrades
+- Watch fish behave autonomously with simple AI
 
-## Run Locally
+This repository contains a small playable prototype built with React, TypeScript and Vite.
 
-**Prerequisites:**  Node.js
+## Features
+- Canvas game loop with entity updates
+- Fish lifecycle and hunger system
+- Coins, upgrades, and a small in-game shop
+- Save persistence via Zustand (localStorage)
 
+## Tech stack
+- React 19 + TypeScript
+- Vite 6 for development
+- Zustand for global state & persistence
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Requirements
+- Node.js 18+ (recommended)
+- npm, pnpm, or yarn
+
+## Install & Run
+Open a terminal and run:
+
+```powershell
+cd "c:\Users\ninja\Documents\Vs code projects\Fish\Fish-Tycoon-Virtual-Aquarium"
+npm install
+npm run dev
+```
+
+Then open the localhost URL printed by Vite (usually http://localhost:5173).
+
+To build and preview the production bundle:
+
+```powershell
+npm run build
+npm run preview
+```
+
+## Gameplay (How to play the prototype)
+- Click / tap the canvas to drop food.
+- Fish will seek food, eat and occasionally drop coins.
+- Click coins to collect them and earn money.
+- Open the shop to buy fish and upgrades.
+
+## Project structure (key files)
+- `App.tsx` – Root component
+- `components/` – UI overlay, canvas, shop modal
+- `services/` – Game store (Zustand)
+- `constants.ts` – Game balancing values and species data
+- `types.ts` – Shared types/interfaces
+- `index.tsx` – App entry
+
+If you plan to contribute, start by exploring `constants.ts` and `services/store.ts` to modify behavior and add species/upgrades.
+
+## Contributing
+Open issues or pull requests with focused changes. Good first steps:
+- Add a new fish species in `constants.ts` with unique behavior.
+- Improve the store save schema and add migration checks.
+- Add a design doc in a `docs/` folder with the intended format.
+
+This project also includes: 
+- `CONTRIBUTING.md` for contribution guidelines
+- `docs/` with `genetics-concept.md` and `water-chemistry.md` to capture design specs
+- `.github/ISSUE_TEMPLATE/` with useful issue templates
+
+## License
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
+
+---
+
+If you'd like, I can add a `CONTRIBUTING.md`, design docs in `docs/`, and a starter `.gitignore` tuned for Unity/Godot (if we pick an engine). Want me to add those now?
