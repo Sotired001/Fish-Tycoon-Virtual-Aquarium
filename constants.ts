@@ -305,6 +305,33 @@ export const UPGRADES: Record<string, Upgrade> = {
     costMultiplier: 1.5,
     maxLevel: 5,
     effect: (lvl) => 1 + (lvl * 0.25) // Hunger decay multiplier (up to 2.25x faster)
+  },
+  heater: {
+    id: 'heater',
+    name: 'Water Heater',
+    description: 'Stabilizes water temperature, preventing drops at night.',
+    baseCost: 300,
+    costMultiplier: 1.5,
+    maxLevel: 5,
+    effect: (lvl) => lvl * 0.2 // Resistance to cold (0 to 1.0)
+  },
+  filter: {
+    id: 'filter',
+    name: 'Power Filter',
+    description: 'Reduces ammonia buildup automatically.',
+    baseCost: 500,
+    costMultiplier: 1.8,
+    maxLevel: 5,
+    effect: (lvl) => lvl * 0.002 // Ammonia reduction per tick
+  },
+  lights: {
+    id: 'lights',
+    name: 'Grow Lights',
+    description: 'Increases plant growth rate.',
+    baseCost: 400,
+    costMultiplier: 1.6,
+    maxLevel: 5,
+    effect: (lvl) => 1 + (lvl * 0.5) // Growth multiplier
   }
 };
 

@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../services/store';
-import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet } from '../types';
+import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet, FishPersonality } from '../types';
 import { FISH_SPECIES, GAME_CONFIG, UPGRADES, DECORATIONS, BIOMES, SKILLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
+import { soundManager } from '../services/SoundManager';
 
 const GameCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -10,6 +11,9 @@ const GameCanvas: React.FC = () => {
   const lastTimeRef = useRef<number>(0);
   const autoFeederTimerRef = useRef<number>(0);
   const waterUpdateTimerRef = useRef<number>(0);
+  const mousePosRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  const isRainingRef = useRef<boolean>(false);
+  const rainTimerRef = useRef<number>(0);
 
   const {
     fish: storeFish,
@@ -113,12 +117,12 @@ const GameCanvas: React.FC = () => {
     });
   };
 
-  const spawnParticle = (x: number, y: number, type: 'BUBBLE' | 'SPARKLE' | 'LEAF') => {
+  const spawnParticle = (x: number, y: number, type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'BONE' | 'RAIN' | 'GLOW') => {
     particlesRef.current.push({
       id: uuidv4(),
       x, y,
       vx: (Math.random() - 0.5) * 1,
-      vy: type === 'BUBBLE' ? -2 : type === 'LEAF' ? 0.5 : -1,
+      vy: type === 'BUBBLE' ? -2 : type === 'LEAF' || type === 'BONE' ? 0.5 : -1,
       life: 1,
       size: Math.random() * 5 + 2,
       type: type as any
@@ -135,7 +139,22 @@ const GameCanvas: React.FC = () => {
     });
   };
 
+  const handleMouseMove = (e: MouseEvent) => {
+    if (canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width; // 0 to 1
+      const y = (e.clientY - rect.top) / rect.height;
+      mousePosRef.current = { x: (x - 0.5) * 2, y: (y - 0.5) * 2 }; // -1 to 1
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
   const handleCanvasClick = (e: React.MouseEvent | React.TouchEvent) => {
+    soundManager.init(); // Ensure audio context is ready
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -159,6 +178,7 @@ const GameCanvas: React.FC = () => {
       const clickedFish = fishRef.current.find(f => Math.hypot(f.x - x, f.y - y) < 30 * f.scale);
       if (clickedFish) {
         sellFish(clickedFish.id);
+        soundManager.playSFX('SELL');
         spawnParticle(clickedFish.x, clickedFish.y, 'SPARKLE');
       }
       return;
@@ -169,19 +189,44 @@ const GameCanvas: React.FC = () => {
       // Reduce algae
       waterParamsRef.current.algae = Math.max(0, waterParamsRef.current.algae - 5);
       updateWaterParams(waterParamsRef.current);
+      soundManager.playSFX('BUBBLE');
       spawnParticle(x, y, 'BUBBLE');
       return;
     }
 
     // Normal Mode: Feed
     dropFood(x, y);
+    soundManager.playSFX('BUBBLE');
     spawnParticle(x, y, 'BUBBLE');
   };
 
   const drawFish = (ctx: CanvasRenderingContext2D, f: EntityFish, species: FishSpecies, time: number) => {
+    // Rare Fish Glow
+    if (species.rarity !== 'COMMON') {
+         ctx.save();
+         ctx.translate(f.x, f.y);
+         const glowSize = 40 * f.scale;
+         const glowColor = species.rarity === 'LEGENDARY' ? 'rgba(255, 215, 0, 0.3)' :
+                           species.rarity === 'EPIC' ? 'rgba(148, 0, 211, 0.3)' :
+                           'rgba(0, 191, 255, 0.2)'; // Rare
+
+         const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, glowSize);
+         grad.addColorStop(0, glowColor);
+         grad.addColorStop(1, 'rgba(0,0,0,0)');
+         ctx.fillStyle = grad;
+         ctx.beginPath();
+         ctx.arc(0, 0, glowSize, 0, Math.PI*2);
+         ctx.fill();
+         ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(f.x, f.y);
-    const scale = f.scale * (species.baseGenes?.scale || 1);
+
+    // Fish Aging: Grow slightly with age
+    const ageFactor = Math.min(1.2, 1.0 + ((f.age || 0) / 100000)); // Grow up to 20% larger
+    const scale = f.scale * (species.baseGenes?.scale || 1) * ageFactor;
+
     ctx.scale(f.vx > 0 ? -scale : scale, scale); // Flip if moving right
 
     // Genes
@@ -233,6 +278,17 @@ const GameCanvas: React.FC = () => {
       ctx.fillText('Sick', -10, -25);
     }
 
+    // Hunting/Fleeing Indicator
+    if (f.currentAction === 'HUNTING') {
+      ctx.fillStyle = 'red';
+      ctx.font = '16px Arial';
+      ctx.fillText('⚔️', -8, -30);
+    } else if (f.currentAction === 'FLEEING') {
+      ctx.fillStyle = 'white';
+      ctx.font = '16px Arial';
+      ctx.fillText('💨', -8, -30);
+    }
+
     ctx.restore();
   };
 
@@ -254,7 +310,7 @@ const GameCanvas: React.FC = () => {
       // Get current biome
       const currentBiome = BIOMES.find(b => b.id === currentBiomeIdRef.current) || BIOMES[0];
 
-      // 1. Clear & Draw Background (Biome)
+      // 1. Clear & Draw Background (Biome) with Parallax
       const gradient = ctx.createLinearGradient(0, 0, 0, height);
 
       // Change bg color based on water quality (Ammonia)
@@ -270,6 +326,44 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
+      // Draw Parallax Layers (Seabed/Rocks)
+      const mx = mousePosRef.current.x * 20; // Max 20px shift
+      const my = mousePosRef.current.y * 10;
+
+      // Far Layer
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      ctx.lineTo(0, height - 100 + my * 0.5);
+      for (let i = 0; i <= width; i += 50) {
+         ctx.lineTo(i, height - 100 + Math.sin(i * 0.01) * 20 + my * 0.5 + (mx * 0.5));
+      }
+      ctx.lineTo(width, height);
+      ctx.fill();
+
+      // Mid Layer
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      ctx.lineTo(0, height - 60 + my * 0.8);
+      for (let i = 0; i <= width; i += 60) {
+         ctx.lineTo(i, height - 60 + Math.sin(i * 0.02 + 2) * 30 + my * 0.8 + (mx * 0.8));
+      }
+      ctx.lineTo(width, height);
+      ctx.fill();
+
+      // Near Layer
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      ctx.beginPath();
+      ctx.moveTo(0, height);
+      ctx.lineTo(0, height - 30 + my);
+      for (let i = 0; i <= width; i += 80) {
+         ctx.lineTo(i, height - 30 + Math.sin(i * 0.03 + 4) * 40 + my + mx);
+      }
+      ctx.lineTo(width, height);
+      ctx.fill();
+
+
       // 1.1 Draw Biome Water Overlay
       ctx.fillStyle = currentBiome.waterColor;
       ctx.fillRect(0, 0, width, height);
@@ -280,29 +374,72 @@ const GameCanvas: React.FC = () => {
          ctx.fillRect(0, 0, width, height);
       }
 
-      // 1.2 Draw Day/Night Cycle Overlay
+      // 1.2 Draw Day/Night Cycle & Dynamic Lighting
       const time = timeOfDayRef.current;
       let darkness = 0.0;
+      let sunColor = 'transparent';
 
       // Night is 20:00 to 06:00
       // Twilight 06:00-08:00 and 18:00-20:00
       if (time >= 6 && time < 8) {
          // Dawn
          darkness = 0.5 - ((time - 6) / 2) * 0.5;
+         sunColor = 'rgba(255, 200, 100, 0.1)';
       } else if (time >= 8 && time < 18) {
          // Day
          darkness = 0;
+         sunColor = 'rgba(255, 255, 200, 0.05)'; // Light shafts
       } else if (time >= 18 && time < 20) {
          // Dusk
          darkness = (time - 18) / 2 * 0.5;
+         sunColor = 'rgba(255, 100, 100, 0.1)';
       } else {
          // Night
-         darkness = 0.5;
+         darkness = 0.6; // Darker night
       }
 
+      // Draw Sun Shafts
+      if (time >= 6 && time <= 20) {
+        ctx.save();
+        ctx.translate(width / 2, -100);
+        ctx.rotate(Math.sin(timestamp * 0.0005) * 0.1); // Slowly sway
+        const sunGrad = ctx.createLinearGradient(-200, 0, 200, height);
+        sunGrad.addColorStop(0, sunColor);
+        sunGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = sunGrad;
+        ctx.beginPath();
+        ctx.moveTo(-200, 0);
+        ctx.lineTo(200, 0);
+        ctx.lineTo(400, height * 1.5);
+        ctx.lineTo(-400, height * 1.5);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      // Darkness Overlay
       if (darkness > 0) {
          ctx.fillStyle = `rgba(0, 0, 20, ${darkness})`;
          ctx.fillRect(0, 0, width, height);
+
+         // Spotlight Effect (Mouse) at night
+         if (darkness > 0.3) {
+             ctx.globalCompositeOperation = 'destination-out';
+             const grad = ctx.createRadialGradient(
+                 width / 2 + (mousePosRef.current.x * width / 2),
+                 height / 2 + (mousePosRef.current.y * height / 2),
+                 50,
+                 width / 2 + (mousePosRef.current.x * width / 2),
+                 height / 2 + (mousePosRef.current.y * height / 2),
+                 300
+             );
+             grad.addColorStop(0, 'rgba(0,0,0,1)');
+             grad.addColorStop(1, 'rgba(0,0,0,0)');
+             ctx.fillStyle = grad;
+             ctx.beginPath();
+             ctx.arc(width / 2 + (mousePosRef.current.x * width / 2), height / 2 + (mousePosRef.current.y * height / 2), 300, 0, Math.PI*2);
+             ctx.fill();
+             ctx.globalCompositeOperation = 'source-over';
+         }
       }
 
       // 1.5 Draw Decorations (Background)
@@ -314,7 +451,10 @@ const GameCanvas: React.FC = () => {
              // Grow only during day (08:00 - 18:00)
              const t = timeOfDayRef.current;
              if (t >= 8 && t <= 18) {
-                dec.growth += 0.0001; // Slow growth
+                // Apply Light Upgrade
+                const lightLvl = upgradesRef.current['lights'] || 0;
+                const growthMult = UPGRADES['lights'].effect(lightLvl);
+                dec.growth += 0.0001 * growthMult; // Accelerated growth
              }
           }
 
@@ -349,11 +489,38 @@ const GameCanvas: React.FC = () => {
         timeOfDayRef.current = (timeOfDayRef.current + 0.2) % 24;
         setTimeOfDay(timeOfDayRef.current);
 
+        // --- Temperature Fluctuation ---
+        // Night (20-06): Drops to 20
+        // Day (06-20): Rises to 25
+        let targetTemp = 25;
+        if (timeOfDayRef.current >= 20 || timeOfDayRef.current < 6) {
+          targetTemp = 20;
+        }
+
+        // Apply Heater Logic
+        const heaterLvl = upgradesRef.current['heater'] || 0;
+        const heaterEffect = UPGRADES['heater'].effect(heaterLvl); // 0 to 1.0 resistance
+
+        // If it's getting cold, heater resists the drop
+        let tempChangeSpeed = 0.01;
+        if (targetTemp < waterParamsRef.current.temperature) {
+           tempChangeSpeed *= (1 - heaterEffect); // Reduce drop speed
+        }
+
+        // Move towards target
+        if (waterParamsRef.current.temperature < targetTemp) {
+          waterParamsRef.current.temperature += tempChangeSpeed;
+        } else if (waterParamsRef.current.temperature > targetTemp) {
+           waterParamsRef.current.temperature -= tempChangeSpeed;
+        }
+
+        // --- Water Chemistry ---
+
         // Ammonia increases by fish count
         const pollution = fishRef.current.length * 0.005;
 
         // Ammonia reduction from decorations
-        const reduction = decorationsRef.current.reduce((acc, dec) => {
+        let reduction = decorationsRef.current.reduce((acc, dec) => {
           const item = DECORATIONS.find(d => d.id === dec.itemId);
           let val = (item?.effect?.type === 'AMMONIA_REDUCTION' ? (item.effect.value || 0) : 0);
 
@@ -363,6 +530,11 @@ const GameCanvas: React.FC = () => {
           }
           return acc + val;
         }, 0);
+
+        // Apply Filter Upgrade
+        const filterLvl = upgradesRef.current['filter'] || 0;
+        const filterReduction = UPGRADES['filter'].effect(filterLvl);
+        reduction += filterReduction;
 
         waterParamsRef.current.ammonia = Math.min(10, Math.max(0, waterParamsRef.current.ammonia + pollution - reduction));
 
@@ -375,6 +547,35 @@ const GameCanvas: React.FC = () => {
 
         // Sync back to store (debounced)
         updateWaterParams(waterParamsRef.current);
+      }
+
+      // 3a. Weather Logic (Rain)
+      rainTimerRef.current += deltaTime;
+      if (rainTimerRef.current > 10000) { // Check every 10s
+        rainTimerRef.current = 0;
+        if (Math.random() < 0.1) { // 10% chance to toggle rain
+             isRainingRef.current = !isRainingRef.current;
+        }
+      }
+
+      if (isRainingRef.current) {
+          // Spawn rain particles
+          for(let i=0; i<2; i++) {
+              particlesRef.current.push({
+                  id: uuidv4(),
+                  x: Math.random() * width,
+                  y: -10,
+                  vx: (Math.random() - 0.5) * 1,
+                  vy: 10 + Math.random() * 5,
+                  life: 1,
+                  size: 2 + Math.random() * 15, // Length of drop
+                  type: 'RAIN'
+              });
+          }
+
+          // Draw Rain Overlay (Darken sky)
+          ctx.fillStyle = 'rgba(0, 0, 20, 0.1)';
+          ctx.fillRect(0,0,width,height);
       }
 
       // 3b. Update & Draw Particles
@@ -397,10 +598,29 @@ const GameCanvas: React.FC = () => {
           ctx.fillStyle = '#FFD700';
           ctx.font = `${p.size * 2}px serif`;
           ctx.fillText('✨', p.x, p.y);
-        } else if ((p.type as any) === 'LEAF') {
+        } else if (p.type === 'LEAF') {
           ctx.fillStyle = '#4ade80';
           ctx.font = `${p.size * 2}px serif`;
           ctx.fillText('🍂', p.x, p.y);
+        } else if (p.type === 'RAIN') {
+          ctx.strokeStyle = 'rgba(200, 200, 255, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + p.vx, p.y + p.size);
+          ctx.stroke();
+        } else if (p.type === 'GLOW') {
+             const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size);
+             grad.addColorStop(0, 'rgba(255, 255, 200, 0.4)');
+             grad.addColorStop(1, 'rgba(255, 255, 200, 0)');
+             ctx.fillStyle = grad;
+             ctx.beginPath();
+             ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+             ctx.fill();
+        } else if (p.type === 'BONE') {
+          ctx.fillStyle = '#e5e7eb'; // Gray-200
+          ctx.font = `${p.size * 2}px serif`;
+          ctx.fillText('🦴', p.x, p.y);
         }
       });
       ctx.restore();
@@ -540,6 +760,7 @@ const GameCanvas: React.FC = () => {
           if (nearestPrey) {
             hunting = true;
             f.state = 'SEEKING_FOOD'; // Reuse state for animation speed
+            f.currentAction = 'HUNTING';
             const prey = nearestPrey as EntityFish;
             const angle = Math.atan2(prey.y - f.y, prey.x - f.x);
             ax += Math.cos(angle) * 0.3; // Chase fast
@@ -554,7 +775,9 @@ const GameCanvas: React.FC = () => {
               if (idx > -1) fishRef.current.splice(idx, 1);
 
               f.hunger = 100;
-              spawnParticle(f.x, f.y, 'LEAF'); // Use LEAF as blood/mess for now, or maybe just bubbles
+              f.currentAction = 'NONE';
+              soundManager.playSFX('EAT');
+              spawnParticle(f.x, f.y, 'BONE');
               spawnParticle(f.x, f.y, 'BUBBLE');
               incrementStat('fishFedCount'); // Counts as feeding? Sure.
             }
@@ -564,6 +787,7 @@ const GameCanvas: React.FC = () => {
         // --- Phase 2: Fleeing Logic (Prey Avoidance) ---
         let fleeing = false;
         if (!hunting) {
+            f.currentAction = 'NONE'; // Reset if not hunting
             // Look for predators nearby
             fishRef.current.forEach(p => {
                const predatorSpecies = FISH_SPECIES.find(s => s.id === p.speciesId);
@@ -572,6 +796,7 @@ const GameCanvas: React.FC = () => {
                    if (dist < 200) { // Fear radius
                        fleeing = true;
                        f.state = 'FLEEING';
+                       f.currentAction = 'FLEEING';
                        // Run away!
                        const angle = Math.atan2(p.y - f.y, p.x - f.x);
                        ax -= Math.cos(angle) * 0.4; // Flee fast
@@ -618,6 +843,7 @@ const GameCanvas: React.FC = () => {
               // Eating causes poop/ammonia
               waterParamsRef.current.ammonia += 0.1;
 
+              soundManager.playSFX('EAT');
               spawnCoin(f.x, f.y, species.baseValue);
               spawnParticle(f.x, f.y, 'BUBBLE');
               incrementStat('fishFedCount');
@@ -630,13 +856,39 @@ const GameCanvas: React.FC = () => {
           ay += (height / 2 - f.y) * 0.0001;
         }
 
+        // --- Personality Traits Influence ---
+        if (f.personality === FishPersonality.HYPER) {
+           ax *= 1.5;
+           ay *= 1.5;
+           if (Math.random() < 0.05) { // Erratic movements
+             ax += (Math.random() - 0.5) * 0.5;
+             ay += (Math.random() - 0.5) * 0.5;
+           }
+        } else if (f.personality === FishPersonality.RELAXED) {
+           ax *= 0.7;
+           ay *= 0.7;
+        } else if (f.personality === FishPersonality.SHY) {
+           // Avoid center
+           const centerX = width / 2;
+           const centerY = height / 2;
+           const distToCenter = Math.hypot(f.x - centerX, f.y - centerY);
+           if (distToCenter < 200) {
+              ax += (f.x - centerX) * 0.0005; // Push away from center
+              ay += (f.y - centerY) * 0.0005;
+           }
+        }
+
         // Apply Acceleration
         f.vx += ax;
         f.vy += ay;
 
         // Limit Speed
         const speed = Math.hypot(f.vx, f.vy);
-        const maxSpeed = ((f.state === 'SEEKING_FOOD' || f.state === 'FLEEING') ? species.speed * 2 : species.speed);
+        let maxSpeed = ((f.state === 'SEEKING_FOOD' || f.state === 'FLEEING') ? species.speed * 2 : species.speed);
+
+        if (f.personality === FishPersonality.HYPER) maxSpeed *= 1.3;
+        if (f.personality === FishPersonality.RELAXED) maxSpeed *= 0.8;
+
         if (speed > maxSpeed) {
           f.vx = (f.vx / speed) * maxSpeed;
           f.vy = (f.vy / speed) * maxSpeed;
@@ -677,6 +929,7 @@ const GameCanvas: React.FC = () => {
         if (c.y < 0 && magnetLvl > 0) {
           c.collected = true;
           addMoney(c.value);
+          soundManager.playSFX('COIN');
           spawnParticle(c.x, c.y, 'SPARKLE');
         }
 
