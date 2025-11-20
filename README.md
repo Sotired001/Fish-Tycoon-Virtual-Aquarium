@@ -78,9 +78,3 @@ This project also includes:
 
 ## License
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-
-This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for details.
-
----
-
-If you'd like, I can add a `CONTRIBUTING.md`, design docs in `docs/`, and a starter `.gitignore` tuned for Unity/Godot (if we pick an engine). Want me to add those now?
