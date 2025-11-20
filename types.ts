@@ -112,7 +112,7 @@ export interface EntityParticle {
   vy: number;
   life: number; // 0-1
   size: number;
-  type: 'BUBBLE' | 'SPARKLE';
+  type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'GLOW' | 'RAIN';
 }
 
 export interface Achievement {
