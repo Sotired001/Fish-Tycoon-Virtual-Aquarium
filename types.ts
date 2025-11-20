@@ -35,6 +35,7 @@ export interface EntityFish {
   parents?: [string, string]; // IDs of parents
   lastBreedTime?: number; // Timestamp of last successful breeding
   disease?: 'ICH' | 'FUNGUS' | 'PARASITE'; // Disease type if infected
+  currentAction?: 'HUNTING' | 'FLEEING' | 'NONE'; // Transient visual state
 }
 
 export interface MedicineItem {
@@ -112,7 +113,7 @@ export interface EntityParticle {
   vy: number;
   life: number; // 0-1
   size: number;
-  type: 'BUBBLE' | 'SPARKLE';
+  type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'BONE';
 }
 
 export interface Achievement {
