@@ -1,7 +1,3 @@
-<div align="center">
-
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-
   <h1>Fish Tycoon: Virtual Aquarium</h2>
 
   <p>A relaxing aquarium simulator built with React + Vite. Feed fish, upgrade your tank, breed species, and earn coins.</p>
