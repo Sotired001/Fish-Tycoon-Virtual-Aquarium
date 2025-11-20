@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { FishSpecies, GameStats, Achievement, EntityFish, FishGenes, WaterParams, EntityDecoration, Quest, QuestType, SkillId } from '../types';
+import { FishSpecies, GameStats, Achievement, EntityFish, FishGenes, WaterParams, EntityDecoration, Quest, QuestType, SkillId, FishPersonality } from '../types';
 import { UPGRADES, FISH_SPECIES, ACHIEVEMENTS, GAME_CONFIG, DECORATIONS, MEDICINES, SKILLS } from '../constants';
 import { generateRandomGenes, generateOffspringGenes } from '../utils/genetics';
 
@@ -89,6 +89,9 @@ export const useGameStore = create<GameState>()(
         magnet: 0,
         tankSize: 0,
         metabolism: 0,
+        heater: 0,
+        filter: 0,
+        lights: 0,
       },
       achievements: [],
       stats: {
@@ -301,6 +304,7 @@ export const useGameStore = create<GameState>()(
               state: 'IDLE',
               targetId: null,
               personalityOffset: Math.random() * 1000,
+              personality: Object.values(FishPersonality)[Math.floor(Math.random() * Object.values(FishPersonality).length)],
               genes: generateRandomGenes(species.id),
               age: 0,
               generation: 0
@@ -492,6 +496,7 @@ export const useGameStore = create<GameState>()(
           state: 'IDLE',
           targetId: null,
           personalityOffset: Math.random() * 1000,
+          personality: Math.random() < 0.5 ? p1.personality : p2.personality, // Inherit personality
           genes: newGenes,
           age: 0,
           generation: Math.max(p1.generation, p2.generation) + 1,
@@ -541,7 +546,7 @@ export const useGameStore = create<GameState>()(
           money: 0,
           fish: [],
           waterParams: { ph: 7.0, temperature: 25, ammonia: 0, nitrites: 0, nitrates: 0, algae: 0 },
-          upgrades: { foodQuality: 0, autoFeeder: 0, magnet: 0, tankSize: 0, metabolism: 0 },
+          upgrades: { foodQuality: 0, autoFeeder: 0, magnet: 0, tankSize: 0, metabolism: 0, heater: 0, filter: 0, lights: 0 },
           prestige: get().prestige + 1,
           gems: gems + bonusGems,
         });

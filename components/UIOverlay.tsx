@@ -6,6 +6,7 @@ import WaterMonitor from './WaterMonitor';
 import QuestBoard from './QuestBoard';
 import SkillTreeModal from './SkillTreeModal';
 import BiomeModal from './BiomeModal';
+import { soundManager } from '../services/SoundManager';
 
 const UIOverlay: React.FC = () => {
   const {
@@ -25,15 +26,28 @@ const UIOverlay: React.FC = () => {
   const [isBiomeModalOpen, setIsBiomeModalOpen] = useState<boolean>(false);
 
   const toggleBreedingModal = () => {
+    soundManager.playSFX('UI_CLICK');
     setIsBreedingModalOpen(!isBreedingModalOpen);
   };
 
   const toggleSkillModal = () => {
+    soundManager.playSFX('UI_CLICK');
     setIsSkillModalOpen(!isSkillModalOpen);
   };
 
   const toggleBiomeModal = () => {
+    soundManager.playSFX('UI_CLICK');
     setIsBiomeModalOpen(!isBiomeModalOpen);
+  };
+
+  const handleShopToggle = () => {
+      soundManager.playSFX('UI_CLICK');
+      toggleShop();
+  };
+
+  const handleSellToggle = () => {
+      soundManager.playSFX('UI_CLICK');
+      toggleSellMode();
   };
 
   useEffect(() => {
@@ -55,11 +69,11 @@ const UIOverlay: React.FC = () => {
       <div className="flex justify-between items-start">
         <div className="flex flex-col gap-2 pointer-events-auto">
           {/* Money Badge */}
-          <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-white/20 flex items-center gap-3 animate-bounce-sm">
-            <div className="bg-amber-100 dark:bg-amber-900/50 p-2 rounded-full">
+          <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-3 rounded-2xl shadow-lg border border-white/20 flex items-center gap-3 hover:scale-105 transition-transform duration-200">
+            <div className="bg-amber-100 dark:bg-amber-900/50 p-2 rounded-full animate-pulse-glow">
               <span className="text-2xl">🪙</span>
             </div>
-            <div>
+            <div key={money} className="animate-pop-in">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Balance</p>
               <p className="text-xl sm:text-2xl font-mono font-black text-slate-800 dark:text-amber-400">
                 ${money.toLocaleString()}
@@ -82,7 +96,7 @@ const UIOverlay: React.FC = () => {
 
         <div className="flex gap-2 pointer-events-auto mt-12 sm:mt-0">
           <button
-            onClick={toggleShop}
+            onClick={handleShopToggle}
             className="bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
           >
             <span className="text-2xl mb-1">🏪</span>
@@ -114,7 +128,7 @@ const UIOverlay: React.FC = () => {
           </button>
 
           <button
-            onClick={toggleSellMode}
+            onClick={handleSellToggle}
             className={`p-4 rounded-2xl shadow-lg transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px] ${isSellMode
               ? 'bg-red-500 text-white shadow-red-500/30 animate-pulse'
               : 'bg-white/10 hover:bg-white/20 text-white backdrop-blur'
@@ -137,7 +151,7 @@ const UIOverlay: React.FC = () => {
 
       {/* Achievement Toast */}
       {lastAchievement && (
-        <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 px-6 py-3 rounded-full shadow-xl font-bold animate-bounce border-2 border-white flex items-center gap-2 pointer-events-auto">
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-yellow-400 text-yellow-900 px-6 py-3 rounded-full shadow-xl font-bold animate-pop-in border-2 border-white flex items-center gap-2 pointer-events-auto">
           <span>🏆</span> Achievement Unlocked: {lastAchievement}
         </div>
       )}

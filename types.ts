@@ -5,6 +5,14 @@ export enum FishRarity {
   LEGENDARY = 'LEGENDARY'
 }
 
+export enum FishPersonality {
+  RELAXED = 'RELAXED', // Slower, steady
+  HYPER = 'HYPER',     // Fast, erratic
+  SHY = 'SHY',         // Avoids others, hides near edges
+  SOCIAL = 'SOCIAL',   // Stronger schooling
+  AGGRESSIVE = 'AGGRESSIVE' // Chases others (even if not carnivorous)
+}
+
 export interface WaterParams {
   ph: number;        // 0-14, ideal usually 6.5-8.0
   temperature: number; // Celsius, ideal usually 22-28
@@ -29,12 +37,14 @@ export interface EntityFish {
   state: 'IDLE' | 'SEEKING_FOOD' | 'FLEEING';
   targetId: string | null;
   personalityOffset: number; // Random seed for movement variation
+  personality: FishPersonality;
   genes: FishGenes;
   age: number; // Time alive
   generation: number; // 0 for shop bought, +1 for bred
   parents?: [string, string]; // IDs of parents
   lastBreedTime?: number; // Timestamp of last successful breeding
   disease?: 'ICH' | 'FUNGUS' | 'PARASITE'; // Disease type if infected
+  currentAction?: 'HUNTING' | 'FLEEING' | 'NONE'; // Transient visual state
 }
 
 export interface MedicineItem {
@@ -112,7 +122,7 @@ export interface EntityParticle {
   vy: number;
   life: number; // 0-1
   size: number;
-  type: 'BUBBLE' | 'SPARKLE';
+  type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'GLOW' | 'RAIN' | 'BONE';
 }
 
 export interface Achievement {
