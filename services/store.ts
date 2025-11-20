@@ -4,6 +4,12 @@ import { FishSpecies, GameStats, Achievement, EntityFish, FishGenes, WaterParams
 import { UPGRADES, FISH_SPECIES, ACHIEVEMENTS, GAME_CONFIG, DECORATIONS, MEDICINES, SKILLS } from '../constants';
 import { generateRandomGenes, generateOffspringGenes } from '../utils/genetics';
 
+interface GameEvent {
+  timestamp: number;
+  type: 'DEATH' | 'SICKNESS' | 'INFO';
+  message: string;
+}
+
 interface GameState {
   money: number;
   gems: number;
@@ -17,8 +23,12 @@ interface GameState {
   skills: Record<string, number>; // skillId -> level
   discoveredSpecies: string[]; // IDs of species seen/owned
   timeOfDay: number; // 0-24
+  eventLog: GameEvent[];
 
   upgrades: Record<string, number>; // upgradeId -> level
+  inventory: {
+    medicines: Record<string, number>; // medicineId -> count
+  };
   achievements: string[]; // ids of unlocked achievements
   stats: GameStats;
   
@@ -34,13 +44,16 @@ interface GameState {
   addMoney: (amount: number) => void;
   spendMoney: (amount: number) => boolean;
   addGem: (amount: number) => void;
+  logEvent: (type: 'DEATH' | 'SICKNESS' | 'INFO', message: string) => void;
   buyFish: (species: FishSpecies) => boolean;
-  buyDecoration: (itemId: string) => boolean;
+  buyDecoration: (itemId: string, quantity?: number) => boolean;
   buyUpgrade: (upgradeId: string) => boolean;
   buySkill: (skillId: SkillId) => boolean;
+  buyMedicine: (medicineId: string, quantity?: number) => boolean;
   buyBiome: (biomeId: string) => boolean;
   setBiome: (biomeId: string) => void;
   treatFish: (fishId: string, medicineId: string) => boolean;
+  updateFishStatus: (updates: { id: string, changes: Partial<EntityFish> }[]) => void;
   unlockAchievement: (id: string) => void;
 
   claimQuest: (questId: string) => void;
@@ -63,53 +76,87 @@ interface GameState {
 
 export const useGameStore = create<GameState>()(
   persist(
-    (set, get) => ({
-      money: 10000,
-      gems: 0,
-      prestige: 1,
-      startTime: Date.now(),
-      fish: [], // Initial fish will be added if empty
-      decorations: [], // Initial decorations
-      quests: [],
-      skills: {}, // Initial skills
-      timeOfDay: 12, // Start at noon
-      currentBiomeId: 'default_biome',
-      unlockedBiomeIds: ['default_biome'],
-      waterParams: {
-        ph: 7.0,
-        temperature: 25,
-        ammonia: 0,
-        nitrites: 0,
-        nitrates: 0,
-        algae: 0
-      },
-      upgrades: {
-        foodQuality: 0,
-        autoFeeder: 0,
-        magnet: 0,
-        tankSize: 0,
-        metabolism: 0,
-        heater: 0,
-        filter: 0,
-        lights: 0,
-      },
-      achievements: [],
-      stats: {
-        totalCoinsEarned: 0,
-        fishFedCount: 0,
-        clicks: 0,
-      },
-      isShopOpen: false,
-      isSettingsOpen: false,
-      isSellMode: false,
+    (set, get) => {
+      // Helper function to create a starting fish
+      const createStartingFish = () => {
+        const goldfish = FISH_SPECIES.find(s => s.id === 'goldfish')!;
+        return {
+          id: `fish_${Date.now()}`,
+          speciesId: 'goldfish',
+          x: 400,
+          y: 300,
+          vx: 0,
+          vy: 0,
+          scale: 1,
+          hunger: 100,
+          health: 100,
+          maxHunger: 100,
+          state: 'IDLE' as const,
+          targetId: null,
+          personalityOffset: Math.random(),
+          personality: 'NEUTRAL' as FishPersonality,
+          genes: generateRandomGenes(goldfish),
+          age: 0,
+          generation: 0,
+          currentAction: 'NONE' as const,
+        };
+      };
 
-      addMoney: (amount) => set((state) => {
+      return {
+        money: 10000,
+        gems: 0,
+        prestige: 1,
+        startTime: Date.now(),
+        fish: [createStartingFish()],
+        decorations: [],
+        quests: [],
+        skills: {},
+        timeOfDay: 12,
+        currentBiomeId: 'default_biome',
+        unlockedBiomeIds: ['default_biome'],
+        eventLog: [],
+        waterParams: {
+          ph: 7.0,
+          temperature: 25,
+          ammonia: 0,
+          nitrites: 0,
+          nitrates: 0,
+          algae: 0
+        },
+        upgrades: {
+          foodQuality: 0,
+          autoFeeder: 0,
+          magnet: 0,
+          tankSize: 0,
+          metabolism: 0,
+          heater: 0,
+          filter: 0,
+          lights: 0,
+        },
+        inventory: {
+          medicines: {}
+        },
+        achievements: [],
+        stats: {
+          totalCoinsEarned: 0,
+          fishFedCount: 0,
+          clicks: 0,
+        },
+        isShopOpen: false,
+        isSettingsOpen: false,
+        isSellMode: false,
+
+        logEvent: (type, message) => set(state => ({
+            eventLog: [...state.eventLog, { timestamp: Date.now(), type, message }].slice(-50)
+        })),
+
+        addMoney: (amount) => set((state) => {
         const prestigeMult = 1 + (state.prestige * 0.1);
         // Skill Multiplier
         const skillLvl = state.skills[SkillId.GOLDEN_SCALES] || 0;
         const skillMult = SKILLS[SkillId.GOLDEN_SCALES].effect(skillLvl);
 
-        const totalAmount = amount * prestigeMult * skillMult;
+        const totalAmount = Math.floor(amount * prestigeMult * skillMult);
 
         const newTotal = state.stats.totalCoinsEarned + totalAmount;
         ACHIEVEMENTS.forEach(ach => {
@@ -323,7 +370,7 @@ export const useGameStore = create<GameState>()(
         return false;
       },
 
-      buyDecoration: (itemId) => {
+      buyDecoration: (itemId, quantity = 1) => {
         const { money, skills } = get();
         const decorationItem = DECORATIONS.find(d => d.id === itemId);
         if (!decorationItem) return false;
@@ -331,22 +378,26 @@ export const useGameStore = create<GameState>()(
         // Discount Skill
         const discountLvl = skills[SkillId.DISCOUNT_SHOP] || 0;
         const discountMult = SKILLS[SkillId.DISCOUNT_SHOP].effect(discountLvl);
-        const finalCost = decorationItem.cost * discountMult;
+        const unitCost = decorationItem.cost * discountMult;
+        const totalCost = unitCost * quantity;
 
-        if (money >= finalCost) {
+        if (money >= totalCost) {
           set((state) => {
-            const newDecoration: EntityDecoration = {
-              id: crypto.randomUUID(),
-              itemId: itemId,
-              x: 100 + Math.random() * 600, // Random placement for now
-              y: 400 + Math.random() * 150, // Near bottom
-              scale: 1.0,
-              growth: decorationItem.type === 'PLANT' ? 0.1 : undefined // Plants start small
-            };
+            const newDecorations: EntityDecoration[] = [];
+            for (let i = 0; i < quantity; i++) {
+              newDecorations.push({
+                id: crypto.randomUUID(),
+                itemId: itemId,
+                x: 100 + Math.random() * 600, // Random placement for now
+                y: 400 + Math.random() * 150, // Near bottom
+                scale: 1.0,
+                growth: decorationItem.type === 'PLANT' ? 0.1 : undefined // Plants start small
+              });
+            }
 
             return {
-              money: state.money - finalCost,
-              decorations: [...state.decorations, newDecoration]
+              money: state.money - totalCost,
+              decorations: [...state.decorations, ...newDecorations]
             };
           });
           return true;
@@ -378,17 +429,55 @@ export const useGameStore = create<GameState>()(
         return false;
       },
 
+      buyMedicine: (medicineId, quantity = 1) => {
+        const { money, skills } = get();
+        const medicine = MEDICINES.find(m => m.id === medicineId);
+        if (!medicine) return false;
+
+        // Discount Skill
+        const discountLvl = skills[SkillId.DISCOUNT_SHOP] || 0;
+        const discountMult = SKILLS[SkillId.DISCOUNT_SHOP].effect(discountLvl);
+        const unitCost = medicine.cost * discountMult;
+        const totalCost = unitCost * quantity;
+
+        if (money >= totalCost) {
+          set((state) => {
+            const currentCount = state.inventory.medicines[medicineId] || 0;
+            return {
+              money: state.money - totalCost,
+              inventory: {
+                ...state.inventory,
+                medicines: {
+                  ...state.inventory.medicines,
+                  [medicineId]: currentCount + quantity
+                }
+              }
+            };
+          });
+          return true;
+        }
+        return false;
+      },
+
       treatFish: (fishId, medicineId) => {
-        const { money, fish } = get();
+        const { fish, inventory } = get();
         const medicine = MEDICINES.find(m => m.id === medicineId);
         if (!medicine) return false;
         
         const targetFish = fish.find(f => f.id === fishId);
         if (!targetFish || !targetFish.disease) return false; // Only treat sick fish
 
-        if (money >= medicine.cost) {
+        // Check Inventory
+        const count = inventory.medicines[medicineId] || 0;
+        if (count > 0) {
            set(state => ({
-               money: state.money - medicine.cost,
+               inventory: {
+                   ...state.inventory,
+                   medicines: {
+                       ...state.inventory.medicines,
+                       [medicineId]: state.inventory.medicines[medicineId] - 1
+                   }
+               },
                fish: state.fish.map(f => {
                    if (f.id === fishId) {
                        // Check if med cures this disease
@@ -402,6 +491,21 @@ export const useGameStore = create<GameState>()(
            return true;
         }
         return false;
+      },
+
+      updateFishStatus: (updates) => {
+        set(state => {
+           const fishMap = new Map(state.fish.map(f => [f.id, f]));
+           updates.forEach(u => {
+               const f = fishMap.get(u.id);
+               if (f) {
+                   // Apply changes
+                   Object.assign(f, u.changes);
+               }
+           });
+           // Reconstruct array
+           return { fish: Array.from(fishMap.values()) };
+        });
       },
 
       unlockAchievement: (id) => {
@@ -541,12 +645,37 @@ export const useGameStore = create<GameState>()(
       prestigeReset: () => {
         const { stats, achievements, gems } = get();
         const bonusGems = Math.floor(stats.totalCoinsEarned / 10000);
+        
+        // Create a starting Goldie fish
+        const goldfish = FISH_SPECIES.find(s => s.id === 'goldfish')!;
+        const startingFish: EntityFish = {
+          id: `fish_${Date.now()}`,
+          speciesId: 'goldfish',
+          x: 400,
+          y: 300,
+          vx: 0,
+          vy: 0,
+          scale: 1,
+          hunger: 100,
+          health: 100,
+          maxHunger: 100,
+          state: 'IDLE',
+          targetId: null,
+          personalityOffset: Math.random(),
+          personality: 'NEUTRAL' as FishPersonality,
+          genes: generateRandomGenes(goldfish),
+          age: 0,
+          generation: 0,
+          currentAction: 'NONE',
+        };
 
         set({
           money: 0,
-          fish: [],
+          fish: [startingFish],
+          decorations: [],
           waterParams: { ph: 7.0, temperature: 25, ammonia: 0, nitrites: 0, nitrates: 0, algae: 0 },
           upgrades: { foodQuality: 0, autoFeeder: 0, magnet: 0, tankSize: 0, metabolism: 0, heater: 0, filter: 0, lights: 0 },
+          inventory: { medicines: {} },
           prestige: get().prestige + 1,
           gems: gems + bonusGems,
         });
@@ -555,9 +684,10 @@ export const useGameStore = create<GameState>()(
       loadFromSave: () => {
         // handled by persist middleware automatically
       }
-    }),
-    {
-      name: 'fish-tycoon-storage',
-    }
+    };
+  },
+  {
+    name: 'fish-tycoon-storage',
+  }
   )
 );

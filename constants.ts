@@ -102,6 +102,15 @@ export const DECORATIONS: DecorationItem[] = [
     effect: { type: 'AMMONIA_REDUCTION', value: 0.001 }
   },
   {
+    id: 'plant_amazon_sword',
+    name: 'Amazon Sword',
+    type: 'PLANT',
+    cost: 500,
+    description: 'Efficiently reduces ammonia.',
+    emoji: '🍃',
+    effect: { type: 'AMMONIA_REDUCTION', value: 0.003 }
+  },
+  {
     id: 'rock_grey',
     name: 'Grey Rock',
     type: 'ROCK',
@@ -276,8 +285,8 @@ export const UPGRADES: Record<string, Upgrade> = {
     description: 'Automatically drops food every few seconds.',
     baseCost: 1000,
     costMultiplier: 2.0,
-    maxLevel: 5,
-    effect: (lvl) => Math.max(1, 6 - lvl) // Seconds between drops (5s down to 1s)
+    maxLevel: 10,
+    effect: (lvl) => Math.max(0.2, 3 - (lvl * 0.3)) // Seconds between drops (2.7s down to 0.2s)
   },
   magnet: {
     id: 'magnet',
@@ -322,7 +331,7 @@ export const UPGRADES: Record<string, Upgrade> = {
     baseCost: 500,
     costMultiplier: 1.8,
     maxLevel: 5,
-    effect: (lvl) => lvl * 0.002 // Ammonia reduction per tick
+    effect: (lvl) => lvl * 0.005 // Ammonia reduction per tick
   },
   lights: {
     id: 'lights',

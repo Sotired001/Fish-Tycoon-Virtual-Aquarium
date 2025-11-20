@@ -107,21 +107,21 @@ export const generateRandomGenes = (speciesId: string): FishGenes => {
     } else if (speciesId === 'puffer') {
         base.bodyColor = '#10B981';
         base.finColor = '#6EE7B7';
-        base.scale = 1.2;
+        base.scale = 1.5; // Increased from 1.2
         base.finShape = 'ROUND';
     } else if (speciesId === 'squid') {
         base.bodyColor = '#8B5CF6';
         base.finColor = '#C4B5FD';
-        base.scale = 1.1;
+        base.scale = 1.8; // Increased from 1.1
     } else if (speciesId === 'shark') {
         base.bodyColor = '#64748B';
         base.finColor = '#94A3B8';
-        base.scale = 1.5;
+        base.scale = 2.5; // Increased from 1.5
         base.finShape = 'FORKED';
     } else if (speciesId === 'whale') {
         base.bodyColor = '#334155';
         base.finColor = '#475569';
-        base.scale = 2.0;
+        base.scale = 4.0; // Increased from 2.0
     }
 
     // Add slight variance to initial shop fish

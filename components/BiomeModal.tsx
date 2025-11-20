@@ -13,8 +13,8 @@ const BiomeModal: React.FC<BiomeModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-cyan-500/30 relative">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-auto">
+      <div className="bg-slate-900 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-cyan-500/30 relative pointer-events-auto">
         
         {/* Header */}
         <div className="p-6 bg-slate-950 text-white flex justify-between items-center border-b border-white/10 z-10">
@@ -66,7 +66,7 @@ const BiomeModal: React.FC<BiomeModalProps> = ({ isOpen, onClose }) => {
                                   <button 
                                     onClick={() => setBiome(biome.id)}
                                     disabled={isEquipped}
-                                    className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${
+                                    className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all pointer-events-auto ${
                                         isEquipped 
                                         ? 'bg-cyan-900/50 text-cyan-500 cursor-default' 
                                         : 'bg-white text-slate-900 hover:bg-cyan-50 hover:text-cyan-700 shadow-lg'
@@ -78,7 +78,7 @@ const BiomeModal: React.FC<BiomeModalProps> = ({ isOpen, onClose }) => {
                                   <button 
                                     onClick={() => buyBiome(biome.id)}
                                     disabled={!canAfford}
-                                    className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${
+                                    className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all pointer-events-auto ${
                                         canAfford 
                                             ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-600/20' 
                                             : 'bg-slate-700 text-slate-500 cursor-not-allowed'

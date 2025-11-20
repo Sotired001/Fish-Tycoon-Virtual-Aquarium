@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGameStore } from '../services/store';
-import { FISH_SPECIES, UPGRADES, DECORATIONS } from '../constants';
+import { FISH_SPECIES, UPGRADES, DECORATIONS, MEDICINES } from '../constants';
 import { FishRarity } from '../types';
+import FishVisual from './FishVisual';
+import { generateRandomGenes } from '../utils/genetics';
 
 const ShopModal: React.FC = () => {
   const {
@@ -10,6 +12,8 @@ const ShopModal: React.FC = () => {
     buyFish,
     buyUpgrade,
     buyDecoration,
+    buyMedicine,
+    inventory,
     fish: ownedFish,
     toggleShop,
     isShopOpen,
@@ -17,7 +21,7 @@ const ShopModal: React.FC = () => {
     sellFish
   } = useGameStore();
 
-  const [activeTab, setActiveTab] = useState<'FISH' | 'UPGRADES' | 'DECOR' | 'MY_TANK'>('FISH');
+  const [activeTab, setActiveTab] = useState<'FISH' | 'UPGRADES' | 'DECOR' | 'SUPPLIES' | 'MY_TANK'>('FISH');
 
   if (!isShopOpen) return null;
 
@@ -59,6 +63,12 @@ const ShopModal: React.FC = () => {
             Equipment
           </button>
           <button
+            onClick={() => setActiveTab('SUPPLIES')}
+            className={`flex-1 p-4 font-bold transition-colors whitespace-nowrap ${activeTab === 'SUPPLIES' ? 'bg-slate-800 text-amber-400 border-b-2 border-amber-400' : 'text-slate-500 hover:bg-slate-800/50'}`}
+          >
+            Supplies
+          </button>
+          <button
             onClick={() => setActiveTab('MY_TANK')}
             className={`flex-1 p-4 font-bold transition-colors whitespace-nowrap ${activeTab === 'MY_TANK' ? 'bg-slate-800 text-amber-400 border-b-2 border-amber-400' : 'text-slate-500 hover:bg-slate-800/50'}`}
           >
@@ -79,7 +89,9 @@ const ShopModal: React.FC = () => {
                 return (
                   <div key={fish.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-4">
-                      <div className="text-2xl">{species?.emoji}</div>
+                      <div className="w-16 h-16 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden border border-slate-200 dark:border-slate-600">
+                        <FishVisual genes={fish.genes} size={60} />
+                      </div>
                       <div>
                         <h3 className="font-bold text-slate-800 dark:text-white">{species?.name} <span className="text-xs text-slate-500">({fish.id.substring(0, 4)})</span></h3>
                         <div className="flex gap-2 text-xs">
@@ -92,13 +104,30 @@ const ShopModal: React.FC = () => {
 
                     <div className="flex gap-2">
                       {isSick && (
-                        <button
-                          onClick={() => treatFish(fish.id, 'med_general')}
-                          disabled={money < 100}
-                          className="bg-green-600 hover:bg-green-500 text-white px-3 py-1 rounded text-xs font-bold"
-                        >
-                          Cure ($100)
-                        </button>
+                        (() => {
+                            // Determine best med (simple logic: try general first, then potent)
+                            // Actually, we know med_general cures ICH/FUNGUS.
+                            // med_potent cures all.
+                            const needsPotent = fish.disease === 'PARASITE';
+                            const medId = needsPotent ? 'med_potent' : 'med_general';
+                            const medName = needsPotent ? 'Super Meds' : 'General Cure';
+                            const hasMed = (inventory?.medicines[medId] || 0) > 0;
+
+                            return (
+                                <button
+                                onClick={() => treatFish(fish.id, medId)}
+                                disabled={!hasMed}
+                                className={`px-3 py-1 rounded text-xs font-bold ${
+                                    hasMed 
+                                    ? 'bg-green-600 hover:bg-green-500 text-white' 
+                                    : 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                }`}
+                                title={!hasMed ? `Buy ${medName} in Supplies` : ''}
+                                >
+                                {hasMed ? 'Cure' : `Need ${medName}`}
+                                </button>
+                            );
+                        })()
                       )}
                       <button
                         onClick={() => sellFish(fish.id)}
@@ -126,8 +155,8 @@ const ShopModal: React.FC = () => {
 
                 return (
                   <div key={fish.id} className={`${bgGradient} p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4 shadow-sm`}>
-                    <div className="text-4xl p-2 bg-slate-200 dark:bg-slate-700 rounded-full w-16 h-16 flex items-center justify-center">
-                      {fish.emoji}
+                    <div className="w-20 h-20 flex-shrink-0 flex items-center justify-center bg-slate-200 dark:bg-slate-700 rounded-full border-4 border-white/10 overflow-visible">
+                       <FishVisual genes={generateRandomGenes(fish.id)} size={70} />
                     </div>
                     <div className="flex-1">
                       <div className="flex justify-between">
@@ -179,18 +208,92 @@ const ShopModal: React.FC = () => {
                           Effect: {item.effect.type} (+{item.effect.value})
                         </p>
                       )}
+                      <div className="flex flex-col mt-2 gap-2">
+                        <span className="font-mono font-bold text-green-600">${item.cost.toLocaleString()}</span>
+                        <div className="flex gap-1">
+                          <button
+                            onClick={() => buyDecoration(item.id, 1)}
+                            disabled={!canAfford}
+                            className={`flex-1 px-2 py-1 rounded-lg text-xs font-bold ${!canAfford
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                : 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg shadow-purple-500/20'
+                              }`}
+                          >
+                            Buy 1
+                          </button>
+                          <button
+                            onClick={() => buyDecoration(item.id, 10)}
+                            disabled={money < item.cost * 10}
+                            className={`flex-1 px-2 py-1 rounded-lg text-xs font-bold ${money < item.cost * 10
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                : 'bg-purple-600 hover:bg-purple-500 text-white shadow-lg shadow-purple-600/20'
+                              }`}
+                          >
+                            x10
+                          </button>
+                          <button
+                            onClick={() => buyDecoration(item.id, 100)}
+                            disabled={money < item.cost * 100}
+                            className={`flex-1 px-2 py-1 rounded-lg text-xs font-bold ${money < item.cost * 100
+                                ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                : 'bg-purple-700 hover:bg-purple-600 text-white shadow-lg shadow-purple-700/20'
+                              }`}
+                          >
+                            x100
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {activeTab === 'SUPPLIES' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {MEDICINES.map(item => {
+                const canAfford = money >= item.cost;
+                const ownedCount = inventory?.medicines[item.id] || 0;
+
+                return (
+                  <div key={item.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-4 shadow-sm">
+                    <div className="text-4xl p-2 bg-red-100 dark:bg-red-900/30 rounded-full w-16 h-16 flex items-center justify-center">
+                      💊
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex justify-between">
+                        <h3 className="font-bold text-slate-800 dark:text-white">{item.name}</h3>
+                        <span className="text-xs bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-600 dark:text-slate-300">Owned: {ownedCount}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">{item.description}</p>
+                      <p className="text-xs text-green-500 mb-2">
+                        Cures: {item.cures.join(', ')}
+                      </p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="font-mono font-bold text-green-600">${item.cost.toLocaleString()}</span>
-                        <button
-                          onClick={() => buyDecoration(item.id)}
-                          disabled={!canAfford}
-                          className={`px-4 py-1 rounded-lg text-sm font-bold ${!canAfford
-                              ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                              : 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg shadow-purple-500/20'
-                            }`}
-                        >
-                          Buy
-                        </button>
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => buyMedicine(item.id, 1)}
+                                disabled={!canAfford}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold ${!canAfford
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20'
+                                }`}
+                            >
+                                Buy 1
+                            </button>
+                             <button
+                                onClick={() => buyMedicine(item.id, 5)}
+                                disabled={money < item.cost * 5}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold ${money < item.cost * 5
+                                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                                    : 'bg-blue-700 hover:bg-blue-600 text-white shadow-lg shadow-blue-700/20'
+                                }`}
+                            >
+                                x5
+                            </button>
+                        </div>
                       </div>
                     </div>
                   </div>

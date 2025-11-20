@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useGameStore } from '../services/store';
-import { EntityFish, SkillId } from '../types';
-import { UPGRADES, GAME_CONFIG, SKILLS } from '../constants'; // Import UPGRADES, GAME_CONFIG, SKILLS
+import { EntityFish, SkillId, FishGenes, FishRarity } from '../types';
+import { UPGRADES, GAME_CONFIG, SKILLS, FISH_SPECIES } from '../constants';
+import { generateOffspringGenes } from '../utils/genetics';
+import FishVisual from './FishVisual';
 
 interface BreedingTankModalProps {
   isOpen: boolean;
@@ -11,136 +13,241 @@ interface BreedingTankModalProps {
 const BreedingTankModal: React.FC<BreedingTankModalProps> = ({ isOpen, onClose }) => {
   const allFish = useGameStore((state) => state.fish);
   const breedFishAction = useGameStore((state) => state.breedFish);
-  const fishCount = useGameStore((state) => state.fish.length); // Get current fish count
-  const tankSizeUpgrade = useGameStore((state) => state.upgrades.tankSize); // Get tank size upgrade
-  const maxFish = UPGRADES.tankSize.effect(tankSizeUpgrade); // Calculate max fish
+  const upgrades = useGameStore((state) => state.upgrades);
+  const skills = useGameStore((state) => state.skills);
+
+  const [parent1Id, setParent1Id] = useState<string | null>(null);
+  const [parent2Id, setParent2Id] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  // Derived State
+  const maxFish = UPGRADES.tankSize.effect(upgrades.tankSize || 0);
+  const currentFishCount = allFish.length;
+  const isTankFull = currentFishCount >= maxFish;
   
-  // Get Skill Level
-  const breedSkillLvl = useGameStore((state) => state.skills[SkillId.BETTER_BREEDING] || 0);
+  const breedSkillLvl = skills[SkillId.BETTER_BREEDING] || 0;
   const cooldownMult = SKILLS[SkillId.BETTER_BREEDING].effect(breedSkillLvl);
   const BREED_COOLDOWN_MS = GAME_CONFIG.BREED_COOLDOWN_MS * cooldownMult;
 
-  const [selectedFish1Id, setSelectedFish1Id] = useState<string | null>(null);
-  const [selectedFish2Id, setSelectedFish2Id] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null); // State for feedback messages
-
-  // Helper to determine if a fish is on cooldown and how much time is left
-  const getFishBreedStatus = (fish: EntityFish) => {
-    const now = Date.now();
-    if (fish.lastBreedTime) {
-      const timeElapsed = now - fish.lastBreedTime;
-      const timeLeft = BREED_COOLDOWN_MS - timeElapsed;
-      if (timeLeft > 0) {
-        const minutesLeft = Math.ceil(timeLeft / (1000 * 60));
-        return { isOnCooldown: true, timeLeft: minutesLeft, message: `On Cooldown (${minutesLeft}m)` };
-      }
-    }
-    return { isOnCooldown: false, timeLeft: 0, message: '' };
+  const getCooldownStatus = (fish: EntityFish) => {
+    if (!fish.lastBreedTime) return { ready: true, text: 'Ready' };
+    const elapsed = Date.now() - fish.lastBreedTime;
+    const remaining = BREED_COOLDOWN_MS - elapsed;
+    if (remaining <= 0) return { ready: true, text: 'Ready' };
+    const mins = Math.ceil(remaining / 60000);
+    return { ready: false, text: `${mins}m`, percent: Math.min(100, (elapsed / BREED_COOLDOWN_MS) * 100) };
   };
 
-  if (!isOpen) {
-    return null;
-  }
+  const parent1 = allFish.find(f => f.id === parent1Id);
+  const parent2 = allFish.find(f => f.id === parent2Id);
+
+  const potentialOffspring = useMemo(() => {
+    if (!parent1 || !parent2) return [];
+    // Simulate 5 babies
+    return Array.from({ length: 5 }).map(() => generateOffspringGenes(parent1.genes, parent2.genes));
+  }, [parent1, parent2]);
+
+  const handleFishClick = (fishId: string) => {
+    setFeedback(null);
+    if (parent1Id === fishId) {
+      setParent1Id(null);
+      return;
+    }
+    if (parent2Id === fishId) {
+      setParent2Id(null);
+      return;
+    }
+
+    if (!parent1Id) setParent1Id(fishId);
+    else if (!parent2Id) setParent2Id(fishId);
+    else {
+      // Both full, replace the one clicked? or just swap 1?
+      // Let's replace P1 for now or just do nothing
+      setParent1Id(fishId);
+      setParent2Id(null);
+    }
+  };
 
   const handleBreed = () => {
-    setMessage(null); // Clear previous messages
-
-    const selectedFish1 = allFish.find(f => f.id === selectedFish1Id);
-    const selectedFish2 = allFish.find(f => f.id === selectedFish2Id);
-
-    if (!selectedFish1 || !selectedFish2) {
-      setMessage('Please select two fish.');
+    if (!parent1Id || !parent2Id) return;
+    if (isTankFull) {
+      setFeedback("Tank is full! Upgrade tank or sell fish.");
       return;
     }
-
-    if (selectedFish1Id === selectedFish2Id) {
-      setMessage('Please select two *different* fish to breed.');
-      return;
-    }
-
-    // Check cooldown for selected fish
-    const status1 = getFishBreedStatus(selectedFish1);
-    const status2 = getFishBreedStatus(selectedFish2);
-
-    if (status1.isOnCooldown) {
-      setMessage(`Parent 1 (${selectedFish1.speciesId}) is ${status1.message}.`);
-      return;
-    }
-    if (status2.isOnCooldown) {
-      setMessage(`Parent 2 (${selectedFish2.speciesId}) is ${status2.message}.`);
-      return;
-    }
-    
-    if (fishCount >= maxFish) {
-      setMessage('Your tank is full! Sell some fish or upgrade your tank size.');
-      return;
-    }
-
-    // Attempt to breed
-    breedFishAction(selectedFish1Id, selectedFish2Id);
-    setMessage('Breeding successful! A new fish has been added to your tank.');
-    setSelectedFish1Id(null);
-    setSelectedFish2Id(null);
-    // Optionally close the modal after a delay or let the user close it
-    // setTimeout(onClose, 2000); 
+    breedFishAction(parent1Id, parent2Id);
+    setFeedback("Breeding successful! Baby fish added.");
+    setParent1Id(null);
+    setParent2Id(null);
   };
 
-  const availableFish = allFish.filter(f => f.age > 0); // Only allow adult fish to breed (or at least not newly spawned ones)
+  if (!isOpen) return null;
 
-  const isBreedButtonDisabled = !selectedFish1Id || !selectedFish2Id || selectedFish1Id === selectedFish2Id || fishCount >= maxFish ||
-                                (selectedFish1Id && getFishBreedStatus(allFish.find(f => f.id === selectedFish1Id)!).isOnCooldown) ||
-                                (selectedFish2Id && getFishBreedStatus(allFish.find(f => f.id === selectedFish2Id)!).isOnCooldown);
   return (
-    <div className="breeding-modal-overlay">
-      <div className="breeding-modal-content">
-        <h2>Breeding Tank</h2>
-
-        {message && <div className="breeding-feedback-message">{message}</div>}
-
-        <div className="fish-selection">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200 pointer-events-auto">
+      <div className="bg-slate-900 w-full max-w-5xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-700 pointer-events-auto">
+        
+        {/* Header */}
+        <div className="p-4 md:p-6 bg-slate-950 border-b border-slate-800 flex justify-between items-center">
           <div>
-            <h3>Parent 1</h3>
-            <select
-              value={selectedFish1Id || ''}
-              onChange={(e) => setSelectedFish1Id(e.target.value)}
-            >
-              <option value="">Select Fish 1</option>
-              {availableFish.map((fish) => {
-                const { isOnCooldown, message } = getFishBreedStatus(fish);
-                const isDisabled = fish.id === selectedFish2Id || isOnCooldown;
-                return (
-                  <option key={fish.id} value={fish.id} disabled={isDisabled}>
-                    {fish.speciesId} (ID: {fish.id.substring(0, 4)}) {message && ` - ${message}`}
-                  </option>
-                );
-              })}
-            </select>
+            <h2 className="text-2xl md:text-3xl font-bold text-pink-500 flex items-center gap-2">
+              <span>🧬</span> Genetic Lab
+            </h2>
+            <p className="text-slate-400 text-sm">Combine DNA to create new species variants.</p>
           </div>
-
-          <div>
-            <h3>Parent 2</h3>
-            <select
-              value={selectedFish2Id || ''}
-              onChange={(e) => setSelectedFish2Id(e.target.value)}
-            >
-              <option value="">Select Fish 2</option>
-              {availableFish.map((fish) => {
-                const { isOnCooldown, message } = getFishBreedStatus(fish);
-                const isDisabled = fish.id === selectedFish1Id || isOnCooldown;
-                return (
-                  <option key={fish.id} value={fish.id} disabled={isDisabled}>
-                    {fish.speciesId} (ID: {fish.id.substring(0, 4)}) {message && ` - ${message}`}
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-3xl">&times;</button>
         </div>
 
-        <button onClick={handleBreed} disabled={isBreedButtonDisabled}>
-          Breed Fish
-        </button>
-        <button onClick={onClose}>Close</button>
+        <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+          
+          {/* LEFT PANEL: Breeding Chamber */}
+          <div className="w-full md:w-1/3 bg-slate-900 p-6 flex flex-col gap-6 border-r border-slate-800 overflow-y-auto">
+            
+            {/* Slots */}
+            <div className="flex gap-4 justify-center items-center">
+              {/* Parent 1 Slot */}
+              <div 
+                className={`w-32 h-40 rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer transition-all ${parent1 ? 'border-pink-500 bg-pink-500/10' : 'border-slate-700 hover:border-slate-500 border-dashed'}`}
+                onClick={() => parent1Id && setParent1Id(null)}
+              >
+                {parent1 ? (
+                  <>
+                    <FishVisual genes={parent1.genes} size={80} />
+                    <span className="mt-2 font-bold text-white text-sm">{FISH_SPECIES.find(s => s.id === parent1.speciesId)?.name}</span>
+                    <span className="text-xs text-slate-400">Parent A</span>
+                  </>
+                ) : (
+                  <span className="text-slate-600 text-4xl">+</span>
+                )}
+              </div>
+
+              <span className="text-2xl text-slate-500">❤️</span>
+
+              {/* Parent 2 Slot */}
+              <div 
+                className={`w-32 h-40 rounded-xl border-2 flex flex-col items-center justify-center cursor-pointer transition-all ${parent2 ? 'border-blue-500 bg-blue-500/10' : 'border-slate-700 hover:border-slate-500 border-dashed'}`}
+                onClick={() => parent2Id && setParent2Id(null)}
+              >
+                {parent2 ? (
+                  <>
+                    <FishVisual genes={parent2.genes} size={80} />
+                    <span className="mt-2 font-bold text-white text-sm">{FISH_SPECIES.find(s => s.id === parent2.speciesId)?.name}</span>
+                    <span className="text-xs text-slate-400">Parent B</span>
+                  </>
+                ) : (
+                  <span className="text-slate-600 text-4xl">+</span>
+                )}
+              </div>
+            </div>
+
+            {/* Action & Feedback */}
+            <div className="text-center">
+               <button
+                 onClick={handleBreed}
+                 disabled={!parent1 || !parent2 || isTankFull}
+                 className={`w-full py-3 rounded-xl font-bold text-lg shadow-lg transition-all ${
+                   !parent1 || !parent2 || isTankFull
+                     ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                     : 'bg-gradient-to-r from-pink-500 to-purple-600 text-white hover:scale-105 hover:shadow-pink-500/25'
+                 }`}
+               >
+                 {isTankFull ? 'Tank Full' : 'Breed Now'}
+               </button>
+               {feedback && <p className="mt-3 text-sm font-bold text-yellow-400 animate-pulse">{feedback}</p>}
+            </div>
+
+            {/* Simulation / Preview */}
+            {parent1 && parent2 && (
+              <div className="bg-slate-950 rounded-xl p-4 border border-slate-800">
+                <h3 className="text-slate-400 text-xs uppercase font-bold mb-3 tracking-wider">Projected Outcomes</h3>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {potentialOffspring.map((genes, i) => (
+                    <div key={i} className="bg-slate-900 p-2 rounded border border-slate-800" title="Possible baby">
+                      <FishVisual genes={genes} size={40} />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-center text-xs text-slate-600 mt-2 italic">Simulation only. Actual results may vary due to mutation.</p>
+              </div>
+            )}
+            
+            <div className="bg-slate-800/50 p-4 rounded-lg text-xs text-slate-400">
+              <h4 className="font-bold text-slate-300 mb-1">Stats</h4>
+              <div className="flex justify-between">
+                <span>Skill:</span>
+                <span className="text-white">Lvl {breedSkillLvl} ({(cooldownMult * 100).toFixed(0)}% Time)</span>
+              </div>
+              <div className="flex justify-between mt-1">
+                <span>Tank Capacity:</span>
+                <span className={`${isTankFull ? 'text-red-400' : 'text-white'}`}>{currentFishCount} / {maxFish}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT PANEL: Fish Selector */}
+          <div className="flex-1 bg-slate-950 p-6 overflow-y-auto">
+            <h3 className="text-white font-bold mb-4 flex justify-between items-center">
+              <span>Select Parents</span>
+              <span className="text-xs font-normal text-slate-500">{allFish.filter(f => f.age > 0).length} eligible fish</span>
+            </h3>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+              {allFish.filter(f => f.age >= 0).map(fish => {
+                const species = FISH_SPECIES.find(s => s.id === fish.speciesId);
+                const isSelected = parent1Id === fish.id || parent2Id === fish.id;
+                const { ready, text, percent } = getCooldownStatus(fish);
+                const rarityColor = species?.rarity === FishRarity.LEGENDARY ? 'text-amber-500' : 
+                                  species?.rarity === FishRarity.EPIC ? 'text-purple-500' : 
+                                  species?.rarity === FishRarity.RARE ? 'text-blue-400' : 'text-slate-300';
+
+                return (
+                  <div 
+                    key={fish.id}
+                    onClick={() => ready && handleFishClick(fish.id)}
+                    className={`relative bg-slate-900 rounded-xl p-3 border-2 transition-all cursor-pointer group
+                      ${isSelected ? 'border-green-500 ring-2 ring-green-500/30 bg-green-500/5' : 
+                        !ready ? 'border-slate-800 opacity-60 cursor-wait' : 'border-slate-800 hover:border-slate-600 hover:bg-slate-800'}
+                    `}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                       <span className={`text-xs font-bold ${rarityColor}`}>{species?.name}</span>
+                       <span className="text-[10px] font-mono text-slate-600">#{fish.id.substring(0,4)}</span>
+                    </div>
+                    
+                    <div className="flex justify-center py-2 group-hover:scale-110 transition-transform">
+                      <FishVisual genes={fish.genes} size={60} />
+                    </div>
+
+                    {/* Cooldown Bar */}
+                    {!ready && (
+                      <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-slate-600" style={{ width: `${percent}%` }} />
+                      </div>
+                    )}
+                    
+                    <div className="mt-2 flex justify-between items-center">
+                       <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded">Gen {fish.generation}</span>
+                       <span className={`text-[10px] font-bold ${ready ? 'text-green-500' : 'text-slate-500'}`}>{text}</span>
+                    </div>
+
+                    {/* Selection Indicator */}
+                    {isSelected && (
+                      <div className="absolute -top-2 -right-2 bg-green-500 text-slate-900 rounded-full w-6 h-6 flex items-center justify-center font-bold text-xs shadow-lg">
+                        {parent1Id === fish.id ? 'A' : 'B'}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            
+            {allFish.length === 0 && (
+               <div className="text-center text-slate-500 mt-20">
+                 <p className="text-4xl mb-2">🕸️</p>
+                 <p>Your tank is empty.</p>
+               </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

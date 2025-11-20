@@ -14,8 +14,8 @@ const SkillTreeModal: React.FC<SkillTreeModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-amber-500/30 relative">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 pointer-events-auto">
+      <div className="bg-slate-900 w-full max-w-4xl h-[80vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-amber-500/30 relative pointer-events-auto">
         
         {/* Background Decor */}
         <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-20 pointer-events-none" />
@@ -78,7 +78,7 @@ const SkillTreeModal: React.FC<SkillTreeModalProps> = ({ isOpen, onClose }) => {
                               <button 
                                 onClick={() => buySkill(skill.id as SkillId)}
                                 disabled={isMaxed || !canAfford}
-                                className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${
+                                className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 transition-all pointer-events-auto ${
                                     isMaxed 
                                     ? 'bg-green-900/30 text-green-500 cursor-default' 
                                     : canAfford 

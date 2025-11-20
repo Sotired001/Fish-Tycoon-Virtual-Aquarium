@@ -12,6 +12,7 @@ const GameCanvas: React.FC = () => {
   const autoFeederTimerRef = useRef<number>(0);
   const waterUpdateTimerRef = useRef<number>(0);
   const mousePosRef = useRef<{ x: number, y: number }>({ x: 0, y: 0 });
+  const storeSyncTimerRef = useRef<number>(0); // New timer for syncing fish status
   const isRainingRef = useRef<boolean>(false);
   const rainTimerRef = useRef<number>(0);
 
@@ -29,7 +30,9 @@ const GameCanvas: React.FC = () => {
     waterParams,
     updateWaterParams,
     timeOfDay,
-    setTimeOfDay
+    setTimeOfDay,
+    updateFishStatus, // Import this
+    logEvent
   } = useGameStore();
 
   // Use refs for high-frequency game entities to avoid React re-renders
@@ -117,6 +120,84 @@ const GameCanvas: React.FC = () => {
     });
   };
 
+  const drawFish = (ctx: CanvasRenderingContext2D, f: EntityFish, species: FishSpecies, timestamp: number) => {
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    if (f.vx < 0) ctx.scale(-1, 1);
+
+    // Highlight if sick
+    if (f.disease) {
+        ctx.shadowColor = 'red';
+        ctx.shadowBlur = 15;
+    }
+
+    // Simple Draw using emoji for now
+    // But I want to replace this with FishVisual logic or similar on canvas
+    // Since FishVisual is React SVG, we can't use it directly in Canvas `ctx`.
+    // We have to replicate the drawing logic using Canvas API.
+    
+    // Visual Scale
+    const currentRenderScale = f.scale * (0.7 + (f.age > 10 ? 0.3 : f.age * 0.03));
+    ctx.scale(currentRenderScale * 5.0, currentRenderScale * 5.0);
+
+    // --- Fish Drawing Logic ---
+    const genes = f.genes;
+    
+    // Tail
+    ctx.fillStyle = genes.finColor;
+    ctx.beginPath();
+    if (genes.finShape === 'FORKED') {
+        ctx.moveTo(-30, 0); ctx.lineTo(-50, -20); ctx.lineTo(-40, 0); ctx.lineTo(-50, 20);
+    } else if (genes.finShape === 'ROUND') {
+        ctx.moveTo(-30, 0); ctx.quadraticCurveTo(-50, -20, -50, 0); ctx.quadraticCurveCurveTo(-50, 20, -30, 0);
+    } else { // TRIANGLE
+        ctx.moveTo(-30, 0); ctx.lineTo(-50, -20); ctx.lineTo(-50, 20);
+    }
+    ctx.fill();
+
+    // Top Fin
+    ctx.beginPath();
+    ctx.moveTo(0, -20); ctx.quadraticCurveTo(10, -40, 20, -20);
+    ctx.fill();
+
+    // Body
+    ctx.fillStyle = genes.bodyColor;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 30, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pattern
+    if (genes.pattern === 'STRIPED') {
+        ctx.strokeStyle = genes.patternColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-10, -18); ctx.lineTo(-10, 18); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(0, 20); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(10, -18); ctx.lineTo(10, 18); ctx.stroke();
+    } else if (genes.pattern === 'SPOTTED') {
+        ctx.fillStyle = genes.patternColor;
+        ctx.beginPath(); ctx.arc(-16, -6, 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-4, 10, 4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(10, -4, 4, 0, Math.PI*2); ctx.fill();
+    }
+
+    // Eye
+    ctx.fillStyle = 'white';
+    ctx.beginPath(); ctx.arc(16, -6, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.beginPath(); ctx.arc(18, -6, 2.4, 0, Math.PI*2); ctx.fill();
+
+    // Side Fin (animated)
+    ctx.fillStyle = genes.finColor;
+    ctx.save();
+    ctx.translate(0, 4);
+    const swimAngle = Math.sin(timestamp / 100 * species.speed) * 0.5;
+    ctx.rotate(swimAngle);
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(6, 6, 0, 12); ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  };
+
   const spawnParticle = (x: number, y: number, type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'BONE' | 'RAIN' | 'GLOW') => {
     particlesRef.current.push({
       id: uuidv4(),
@@ -184,6 +265,22 @@ const GameCanvas: React.FC = () => {
       return;
     }
 
+    // Try to collect coins first
+    const coinClickRadius = 40;
+    let clickedCoin = false;
+    coinsRef.current.forEach(coin => {
+      const dist = Math.hypot(coin.x - x, coin.y - y);
+      if (dist < coinClickRadius && !coin.collected) {
+        coin.collected = true;
+        addMoney(coin.value);
+        soundManager.playSFX('COIN');
+        spawnParticle(coin.x, coin.y, 'SPARKLE');
+        clickedCoin = true;
+      }
+    });
+
+    if (clickedCoin) return;
+
     // Scrub Algae?
     if (waterParamsRef.current.algae > 0) {
       // Reduce algae
@@ -198,98 +295,6 @@ const GameCanvas: React.FC = () => {
     dropFood(x, y);
     soundManager.playSFX('BUBBLE');
     spawnParticle(x, y, 'BUBBLE');
-  };
-
-  const drawFish = (ctx: CanvasRenderingContext2D, f: EntityFish, species: FishSpecies, time: number) => {
-    // Rare Fish Glow
-    if (species.rarity !== 'COMMON') {
-         ctx.save();
-         ctx.translate(f.x, f.y);
-         const glowSize = 40 * f.scale;
-         const glowColor = species.rarity === 'LEGENDARY' ? 'rgba(255, 215, 0, 0.3)' :
-                           species.rarity === 'EPIC' ? 'rgba(148, 0, 211, 0.3)' :
-                           'rgba(0, 191, 255, 0.2)'; // Rare
-
-         const grad = ctx.createRadialGradient(0, 0, 10, 0, 0, glowSize);
-         grad.addColorStop(0, glowColor);
-         grad.addColorStop(1, 'rgba(0,0,0,0)');
-         ctx.fillStyle = grad;
-         ctx.beginPath();
-         ctx.arc(0, 0, glowSize, 0, Math.PI*2);
-         ctx.fill();
-         ctx.restore();
-    }
-
-    ctx.save();
-    ctx.translate(f.x, f.y);
-
-    // Fish Aging: Grow slightly with age
-    const ageFactor = Math.min(1.2, 1.0 + ((f.age || 0) / 100000)); // Grow up to 20% larger
-    const scale = f.scale * (species.baseGenes?.scale || 1) * ageFactor;
-
-    ctx.scale(f.vx > 0 ? -scale : scale, scale); // Flip if moving right
-
-    // Genes
-    const bodyColor = f.genes?.bodyColor || species.baseGenes?.bodyColor || '#FFA500';
-    const finColor = f.genes?.finColor || species.baseGenes?.finColor || '#FF4500';
-
-    // Draw Body
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 20, 12, 0, 0, Math.PI * 2);
-    ctx.fillStyle = bodyColor;
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Draw Eye
-    ctx.beginPath();
-    ctx.arc(12, -4, 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'white';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(12, -4, 1, 0, Math.PI * 2);
-    ctx.fillStyle = 'black';
-    ctx.fill();
-
-    // Draw Fin (Side)
-    ctx.beginPath();
-    ctx.moveTo(5, 2);
-    ctx.quadraticCurveTo(0, 10, -5, 2);
-    ctx.fillStyle = finColor;
-    ctx.fill();
-    ctx.stroke();
-
-    // Hunger indicator (if starving)
-    if (f.hunger < 20) {
-      ctx.fillStyle = 'red';
-      ctx.font = '12px Arial';
-      ctx.fillText('!', 0, -20);
-    }
-
-    // Health indicator (if sick)
-    if (f.health < 50) {
-      ctx.fillStyle = '#00FF00'; // Greenish tint for sick
-      ctx.globalAlpha = 0.3;
-      ctx.fill();
-      ctx.globalAlpha = 1.0;
-      ctx.fillStyle = 'lime';
-      ctx.font = '12px Arial';
-      ctx.fillText('Sick', -10, -25);
-    }
-
-    // Hunting/Fleeing Indicator
-    if (f.currentAction === 'HUNTING') {
-      ctx.fillStyle = 'red';
-      ctx.font = '16px Arial';
-      ctx.fillText('⚔️', -8, -30);
-    } else if (f.currentAction === 'FLEEING') {
-      ctx.fillStyle = 'white';
-      ctx.font = '16px Arial';
-      ctx.fillText('💨', -8, -30);
-    }
-
-    ctx.restore();
   };
 
   // Game Loop
@@ -326,42 +331,87 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
-      // Draw Parallax Layers (Seabed/Rocks)
-      const mx = mousePosRef.current.x * 20; // Max 20px shift
-      const my = mousePosRef.current.y * 10;
+      // --- Enhanced Background Rendering ---
+      const mx = mousePosRef.current.x * 30; 
+      const my = mousePosRef.current.y * 15;
 
-      // Far Layer
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+      // 1. Deep Water Vignette (Corner darkness)
+      const vignette = ctx.createRadialGradient(width/2, height/2, height/3, width/2, height/2, height);
+      vignette.addColorStop(0, 'rgba(0,0,0,0)');
+      vignette.addColorStop(1, 'rgba(0,0,30,0.5)');
+      ctx.fillStyle = vignette;
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. Faux Caustics (Light refraction) - Top area
+      ctx.save();
+      ctx.globalAlpha = 0.15; // More visible
+      ctx.strokeStyle = '#cceeff'; // Brighter blue
+      ctx.lineWidth = 4; // Thicker lines
+      ctx.beginPath();
+      for(let y=-50; y < height/2; y+=40) {
+          ctx.moveTo(0, y);
+          for(let x=0; x <= width; x+=50) {
+              // Wobbly grid lines simulating light through water surface
+              const dy = Math.sin(x * 0.01 + timestamp * 0.001 + y) * 25; // More pronounced wobble
+              const dx = Math.cos(y * 0.01 + timestamp * 0.001) * 25;
+              ctx.lineTo(x + dx, y + dy);
+          }
+      }
+      ctx.stroke();
+      ctx.restore();
+
+      // 3. Far Background Mountains (Dark Silhouette)
+      ctx.fillStyle = '#000f22'; // Even deeper Navy
       ctx.beginPath();
       ctx.moveTo(0, height);
-      ctx.lineTo(0, height - 100 + my * 0.5);
       for (let i = 0; i <= width; i += 50) {
-         ctx.lineTo(i, height - 100 + Math.sin(i * 0.01) * 20 + my * 0.5 + (mx * 0.5));
+         const h = height - 250 + Math.sin(i * 0.005) * 60 + Math.cos(i * 0.02) * 30 + (my * 0.2);
+         ctx.lineTo(i, h);
       }
       ctx.lineTo(width, height);
       ctx.fill();
 
-      // Mid Layer
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+      // 4. Mid-Ground Reef/Rocks (Darker Teal/Grey)
+      ctx.fillStyle = '#0a2020'; // Even darker Teal
       ctx.beginPath();
       ctx.moveTo(0, height);
-      ctx.lineTo(0, height - 60 + my * 0.8);
-      for (let i = 0; i <= width; i += 60) {
-         ctx.lineTo(i, height - 60 + Math.sin(i * 0.02 + 2) * 30 + my * 0.8 + (mx * 0.8));
+      for (let i = 0; i <= width; i += 30) {
+         const h = height - 150 + Math.sin(i * 0.01 + 2) * 40 + (my * 0.4) + (mx * 0.2);
+         ctx.lineTo(i, h);
       }
       ctx.lineTo(width, height);
       ctx.fill();
 
-      // Near Layer
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+      // 5. Foreground Sand (Gradient + Detail)
+      const sandGrad = ctx.createLinearGradient(0, height - 100, 0, height);
+      sandGrad.addColorStop(0, '#d8c8a8'); // Slightly lighter Golden Sand
+      sandGrad.addColorStop(1, '#a68a5c'); // Deep Sand
+      ctx.fillStyle = sandGrad;
+      
       ctx.beginPath();
       ctx.moveTo(0, height);
-      ctx.lineTo(0, height - 30 + my);
-      for (let i = 0; i <= width; i += 80) {
-         ctx.lineTo(i, height - 30 + Math.sin(i * 0.03 + 4) * 40 + my + mx);
+      // Smooth curve
+      ctx.lineTo(0, height - 80 + my);
+      for (let i = 0; i <= width; i += 20) {
+         const h = height - 80 + Math.sin(i * 0.008 + 4) * 20 + Math.sin(i * 0.03) * 10 + my + (mx * 0.5);
+         ctx.lineTo(i, h);
       }
       ctx.lineTo(width, height);
       ctx.fill();
+
+      // 6. Sand Texture (Simple Pebbles)
+      ctx.fillStyle = 'rgba(120, 90, 0, 0.4)'; // Darker, more visible pebbles
+      // Draw decorative rocks/pebbles
+      for (let i = 50; i < width; i += 150) {
+          const h = height - 80 + Math.sin(i * 0.008 + 4) * 20 + Math.sin(i * 0.03) * 10 + my + (mx * 0.5); // Approximate sand height
+          ctx.beginPath();
+          ctx.arc(i + mx, h + 20, 8 + (i % 8), 0, Math.PI*2); // Larger pebbles
+          ctx.fill();
+          
+          // Tiny speckles
+          ctx.fillRect(i + 30 + mx, h + 10, 4, 4); // Larger speckles
+          ctx.fillRect(i - 40 + mx, h + 25, 3, 3);
+      }
 
 
       // 1.1 Draw Biome Water Overlay
@@ -499,25 +549,27 @@ const GameCanvas: React.FC = () => {
 
         // Apply Heater Logic
         const heaterLvl = upgradesRef.current['heater'] || 0;
-        const heaterEffect = UPGRADES['heater'].effect(heaterLvl); // 0 to 1.0 resistance
+        const heaterEffect = UPGRADES['heater'].effect(heaterLvl); // 0 to 2.0 multiplier for heating
 
-        // If it's getting cold, heater resists the drop
+        // Base change speed towards target
         let tempChangeSpeed = 0.01;
-        if (targetTemp < waterParamsRef.current.temperature) {
-           tempChangeSpeed *= (1 - heaterEffect); // Reduce drop speed
+
+        // If falling and heater is active, resist the cold by accelerating heat-up
+        if (waterParamsRef.current.temperature > targetTemp && heaterLvl > 0) {
+          tempChangeSpeed *= heaterEffect; // Heater speeds up recovery to target
         }
 
         // Move towards target
         if (waterParamsRef.current.temperature < targetTemp) {
           waterParamsRef.current.temperature += tempChangeSpeed;
         } else if (waterParamsRef.current.temperature > targetTemp) {
-           waterParamsRef.current.temperature -= tempChangeSpeed;
+          waterParamsRef.current.temperature -= tempChangeSpeed;
         }
 
         // --- Water Chemistry ---
 
-        // Ammonia increases by fish count
-        const pollution = fishRef.current.length * 0.005;
+        // Ammonia increases by fish count (reduced for balance)
+        const pollution = fishRef.current.length * 0.002;
 
         // Ammonia reduction from decorations
         let reduction = decorationsRef.current.reduce((acc, dec) => {
@@ -540,13 +592,31 @@ const GameCanvas: React.FC = () => {
 
         // Algae Growth
         // Grows if ammonia > 1 and day time (8-18)
-        const time = timeOfDayRef.current;
-        if (waterParamsRef.current.ammonia > 1 && time >= 8 && time <= 18) {
+        const currentHour = timeOfDayRef.current;
+        if (waterParamsRef.current.ammonia > 1 && currentHour >= 8 && currentHour <= 18) {
            waterParamsRef.current.algae = Math.min(100, waterParamsRef.current.algae + 0.1);
         }
 
         // Sync back to store (debounced)
         updateWaterParams(waterParamsRef.current);
+      }
+
+      // 3.5 Sync Fish Status to Store (Every 2 seconds)
+      storeSyncTimerRef.current += deltaTime;
+      if (storeSyncTimerRef.current > 2000) {
+          storeSyncTimerRef.current = 0;
+          const updates = fishRef.current.map(f => ({
+              id: f.id,
+              changes: {
+                  health: f.health,
+                  hunger: f.hunger,
+                  disease: f.disease,
+                  age: f.age + (2000 / 60000)
+              }
+          }));
+          if (updates.length > 0) {
+              updateFishStatus(updates);
+          }
       }
 
       // 3a. Weather Logic (Rain)
@@ -679,7 +749,8 @@ const GameCanvas: React.FC = () => {
         } else {
           // Chance to get sick if water is bad
           if (waterParamsRef.current.ammonia > 2.0 && Math.random() < 0.0005) {
-            // TODO: Dispatch infect
+             const diseases = ['ICH', 'FUNGUS', 'PARASITE'] as const;
+             f.disease = diseases[Math.floor(Math.random() * diseases.length)];
           }
         }
 
@@ -905,7 +976,11 @@ const GameCanvas: React.FC = () => {
       // Remove dead fish (health <= 0)
       const deadFish = fishRef.current.filter(f => f.health <= 0);
       if (deadFish.length > 0) {
-        deadFish.forEach(f => removeFish(f.id)); // Dead fish give no money
+        deadFish.forEach(f => {
+            const species = FISH_SPECIES.find(s => s.id === f.speciesId)?.name || 'Fish';
+            logEvent('DEATH', `${species} (#${f.id.substring(0,4)}) died.`);
+            removeFish(f.id);
+        }); 
       }
 
       // 6. Update & Draw Coins

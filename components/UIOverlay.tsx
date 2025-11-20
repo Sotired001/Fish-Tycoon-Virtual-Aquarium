@@ -6,6 +6,11 @@ import WaterMonitor from './WaterMonitor';
 import QuestBoard from './QuestBoard';
 import SkillTreeModal from './SkillTreeModal';
 import BiomeModal from './BiomeModal';
+import PrestigeModal from './PrestigeModal';
+import LeaderboardModal from './LeaderboardModal';
+import StatsModal from './StatsModal';
+import FishLogModal from './FishLogModal';
+import EventLogModal from './EventLogModal';
 import { soundManager } from '../services/SoundManager';
 
 const UIOverlay: React.FC = () => {
@@ -24,10 +29,35 @@ const UIOverlay: React.FC = () => {
   const [isBreedingModalOpen, setIsBreedingModalOpen] = useState<boolean>(false);
   const [isSkillModalOpen, setIsSkillModalOpen] = useState<boolean>(false);
   const [isBiomeModalOpen, setIsBiomeModalOpen] = useState<boolean>(false);
+  const [isPrestigeModalOpen, setIsPrestigeModalOpen] = useState<boolean>(false);
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState<boolean>(false);
+  const [isFishLogOpen, setIsFishLogOpen] = useState<boolean>(false);
+  const [isEventLogOpen, setIsEventLogOpen] = useState<boolean>(false);
 
   const toggleBreedingModal = () => {
     soundManager.playSFX('UI_CLICK');
     setIsBreedingModalOpen(!isBreedingModalOpen);
+  };
+
+  const toggleLeaderboard = () => {
+    soundManager.playSFX('UI_CLICK');
+    setIsLeaderboardOpen(!isLeaderboardOpen);
+  };
+  
+  const toggleStatsModal = () => {
+    soundManager.playSFX('UI_CLICK');
+    setIsStatsModalOpen(!isStatsModalOpen);
+  };
+
+  const toggleFishLog = () => {
+    soundManager.playSFX('UI_CLICK');
+    setIsFishLogOpen(!isFishLogOpen);
+  };
+
+  const toggleEventLog = () => {
+    soundManager.playSFX('UI_CLICK');
+    setIsEventLogOpen(!isEventLogOpen);
   };
 
   const toggleSkillModal = () => {
@@ -38,6 +68,11 @@ const UIOverlay: React.FC = () => {
   const toggleBiomeModal = () => {
     soundManager.playSFX('UI_CLICK');
     setIsBiomeModalOpen(!isBiomeModalOpen);
+  };
+
+  const togglePrestigeModal = () => {
+    soundManager.playSFX('UI_CLICK');
+    setIsPrestigeModalOpen(!isPrestigeModalOpen);
   };
 
   const handleShopToggle = () => {
@@ -62,6 +97,8 @@ const UIOverlay: React.FC = () => {
     }
   }, [achievements]);
 
+  const prestigeMultiplier = (1 + (prestige * 0.1)).toFixed(1);
+
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-4 sm:p-6">
 
@@ -83,7 +120,7 @@ const UIOverlay: React.FC = () => {
 
           {/* Stats / Prestige */}
           <div className="bg-black/40 backdrop-blur text-white text-xs p-2 rounded-lg inline-block mb-2">
-            <p>Prestige Multiplier: <span className="text-amber-400 font-bold">x{prestige.toFixed(1)}</span></p>
+            <p>Prestige Multiplier: <span className="text-amber-400 font-bold">x{prestigeMultiplier}</span></p>
             <p>Fish Fed: {stats.fishFedCount}</p>
           </div>
 
@@ -94,58 +131,113 @@ const UIOverlay: React.FC = () => {
           <QuestBoard />
         </div>
 
-        <div className="flex gap-2 pointer-events-auto mt-12 sm:mt-0">
-          <button
-            onClick={handleShopToggle}
-            className="bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white p-4 rounded-2xl shadow-lg shadow-blue-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
-          >
-            <span className="text-2xl mb-1">🏪</span>
-            <span className="text-xs font-bold">SHOP</span>
-          </button>
+        <div className="flex flex-col gap-3 pointer-events-auto mt-16 sm:mt-0">
+          {/* Menu Buttons Group */}
+          <div className="flex flex-col gap-2">
+             <button
+                onClick={handleShopToggle}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-blue-500/50 hover:border-blue-400 hover:bg-blue-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Shop"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🏪</div>
+                <span className="text-[10px] font-bold text-blue-200 mt-1">SHOP</span>
+              </button>
 
-          <button
-            onClick={toggleBreedingModal}
-            className="bg-gradient-to-b from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 text-white p-4 rounded-2xl shadow-lg shadow-green-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
-          >
-            <span className="text-2xl mb-1">🧬</span>
-            <span className="text-xs font-bold">BREED</span>
-          </button>
+              <button
+                onClick={toggleBreedingModal}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-green-500/50 hover:border-green-400 hover:bg-green-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Breeding"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🧬</div>
+                <span className="text-[10px] font-bold text-green-200 mt-1">BREED</span>
+              </button>
 
-          <button
-            onClick={toggleSkillModal}
-            className="bg-gradient-to-b from-purple-500 to-purple-700 hover:from-purple-400 hover:to-purple-600 text-white p-4 rounded-2xl shadow-lg shadow-purple-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
-          >
-            <span className="text-2xl mb-1">🧪</span>
-            <span className="text-xs font-bold">LAB</span>
-          </button>
+              <button
+                onClick={toggleSkillModal}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-purple-500/50 hover:border-purple-400 hover:bg-purple-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Research Lab"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🧪</div>
+                <span className="text-[10px] font-bold text-purple-200 mt-1">LAB</span>
+              </button>
 
-          <button
-            onClick={toggleBiomeModal}
-            className="bg-gradient-to-b from-cyan-500 to-cyan-700 hover:from-cyan-400 hover:to-cyan-600 text-white p-4 rounded-2xl shadow-lg shadow-cyan-500/30 transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px]"
-          >
-            <span className="text-2xl mb-1">🌊</span>
-            <span className="text-xs font-bold">THEMES</span>
-          </button>
+              <button
+                onClick={toggleBiomeModal}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Themes"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🌊</div>
+                <span className="text-[10px] font-bold text-cyan-200 mt-1">THEME</span>
+              </button>
 
-          <button
-            onClick={handleSellToggle}
-            className={`p-4 rounded-2xl shadow-lg transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px] ${isSellMode
-              ? 'bg-red-500 text-white shadow-red-500/30 animate-pulse'
-              : 'bg-white/10 hover:bg-white/20 text-white backdrop-blur'
-              }`}
-          >
-            <span className="text-2xl mb-1">{isSellMode ? '🚫' : '💰'}</span>
-            <span className="text-xs font-bold">{isSellMode ? 'CANCEL' : 'SELL'}</span>
-          </button>
+              <button
+                onClick={toggleStatsModal}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-blue-500/50 hover:border-blue-400 hover:bg-blue-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Statistics"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">📊</div>
+                <span className="text-[10px] font-bold text-blue-200 mt-1">STATS</span>
+              </button>
 
-          <button
-            onClick={() => {
-              if (window.confirm("Reset progress for Prestige bonus?")) prestigeReset();
-            }}
-            className="bg-purple-600/80 hover:bg-purple-600 text-white p-2 rounded-xl text-xs font-bold backdrop-blur"
-          >
-            Prestige
-          </button>
+              <button
+                onClick={toggleFishLog}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-cyan-500/50 hover:border-cyan-400 hover:bg-cyan-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Fish Log"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">📖</div>
+                <span className="text-[10px] font-bold text-cyan-200 mt-1">LOG</span>
+              </button>
+
+              <button
+                onClick={toggleEventLog}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-red-500/50 hover:border-red-400 hover:bg-red-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Event Log"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">📜</div>
+                <span className="text-[10px] font-bold text-red-200 mt-1">EVENTS</span>
+              </button>
+
+              <button
+                onClick={handleSellToggle}
+                className={`group relative w-16 h-16 rounded-2xl border transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md
+                  ${isSellMode 
+                    ? 'bg-red-500/80 border-red-400 animate-pulse shadow-red-500/50' 
+                    : 'bg-slate-900/80 border-amber-500/50 hover:border-amber-400 hover:bg-amber-600/20'
+                  }`}
+                title="Sell Mode"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">{isSellMode ? '🚫' : '💰'}</div>
+                <span className={`text-[10px] font-bold mt-1 ${isSellMode ? 'text-white' : 'text-amber-200'}`}>{isSellMode ? 'CANCEL' : 'SELL'}</span>
+              </button>
+
+              <button
+                onClick={toggleLeaderboard}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-yellow-500/50 hover:border-yellow-400 hover:bg-yellow-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Leaderboard"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🏆</div>
+                <span className="text-[10px] font-bold text-yellow-200 mt-1">TOP</span>
+              </button>
+
+              <button
+                onClick={togglePrestigeModal}
+                className="group relative w-16 h-16 bg-slate-900/80 rounded-2xl border border-fuchsia-500/50 hover:border-fuchsia-400 hover:bg-fuchsia-600/20 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Prestige"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">✨</div>
+                <span className="text-[10px] font-bold text-fuchsia-200 mt-1">RANK</span>
+              </button>
+
+              {/* Dev Button */}
+              <button
+                onClick={() => useGameStore.getState().addMoney(20000)}
+                className="group relative w-16 h-16 bg-black/80 rounded-2xl border border-gray-500/50 hover:border-white hover:bg-gray-800 transition-all active:scale-95 flex flex-col items-center justify-center shadow-lg shadow-black/50 backdrop-blur-md"
+                title="Add 20k Cash"
+              >
+                <div className="text-2xl group-hover:scale-110 transition-transform">🔧</div>
+                <span className="text-[10px] font-bold text-gray-200 mt-1">DEV</span>
+              </button>
+          </div>
         </div>
       </div>
 
@@ -165,6 +257,11 @@ const UIOverlay: React.FC = () => {
       <BreedingTankModal isOpen={isBreedingModalOpen} onClose={toggleBreedingModal} />
       <SkillTreeModal isOpen={isSkillModalOpen} onClose={toggleSkillModal} />
       <BiomeModal isOpen={isBiomeModalOpen} onClose={toggleBiomeModal} />
+      <PrestigeModal isOpen={isPrestigeModalOpen} onClose={togglePrestigeModal} />
+      <LeaderboardModal isOpen={isLeaderboardOpen} onClose={toggleLeaderboard} />
+      <StatsModal isOpen={isStatsModalOpen} onClose={toggleStatsModal} />
+      <FishLogModal isOpen={isFishLogOpen} onClose={toggleFishLog} />
+      <EventLogModal isOpen={isEventLogOpen} onClose={toggleEventLog} />
     </div>
   );
 };
