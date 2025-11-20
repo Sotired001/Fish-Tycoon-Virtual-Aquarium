@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../services/store';
-import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet } from '../types';
+import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet, FishPersonality } from '../types';
 import { FISH_SPECIES, GAME_CONFIG, UPGRADES, DECORATIONS, BIOMES, SKILLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -325,7 +325,10 @@ const GameCanvas: React.FC = () => {
              // Grow only during day (08:00 - 18:00)
              const t = timeOfDayRef.current;
              if (t >= 8 && t <= 18) {
-                dec.growth += 0.0001; // Slow growth
+                // Apply Light Upgrade
+                const lightLvl = upgradesRef.current['lights'] || 0;
+                const growthMult = UPGRADES['lights'].effect(lightLvl);
+                dec.growth += 0.0001 * growthMult; // Accelerated growth
              }
           }
 
@@ -360,11 +363,38 @@ const GameCanvas: React.FC = () => {
         timeOfDayRef.current = (timeOfDayRef.current + 0.2) % 24;
         setTimeOfDay(timeOfDayRef.current);
 
+        // --- Temperature Fluctuation ---
+        // Night (20-06): Drops to 20
+        // Day (06-20): Rises to 25
+        let targetTemp = 25;
+        if (timeOfDayRef.current >= 20 || timeOfDayRef.current < 6) {
+          targetTemp = 20;
+        }
+
+        // Apply Heater Logic
+        const heaterLvl = upgradesRef.current['heater'] || 0;
+        const heaterEffect = UPGRADES['heater'].effect(heaterLvl); // 0 to 1.0 resistance
+
+        // If it's getting cold, heater resists the drop
+        let tempChangeSpeed = 0.01;
+        if (targetTemp < waterParamsRef.current.temperature) {
+           tempChangeSpeed *= (1 - heaterEffect); // Reduce drop speed
+        }
+
+        // Move towards target
+        if (waterParamsRef.current.temperature < targetTemp) {
+          waterParamsRef.current.temperature += tempChangeSpeed;
+        } else if (waterParamsRef.current.temperature > targetTemp) {
+           waterParamsRef.current.temperature -= tempChangeSpeed;
+        }
+
+        // --- Water Chemistry ---
+
         // Ammonia increases by fish count
         const pollution = fishRef.current.length * 0.005;
 
         // Ammonia reduction from decorations
-        const reduction = decorationsRef.current.reduce((acc, dec) => {
+        let reduction = decorationsRef.current.reduce((acc, dec) => {
           const item = DECORATIONS.find(d => d.id === dec.itemId);
           let val = (item?.effect?.type === 'AMMONIA_REDUCTION' ? (item.effect.value || 0) : 0);
 
@@ -374,6 +404,11 @@ const GameCanvas: React.FC = () => {
           }
           return acc + val;
         }, 0);
+
+        // Apply Filter Upgrade
+        const filterLvl = upgradesRef.current['filter'] || 0;
+        const filterReduction = UPGRADES['filter'].effect(filterLvl);
+        reduction += filterReduction;
 
         waterParamsRef.current.ammonia = Math.min(10, Math.max(0, waterParamsRef.current.ammonia + pollution - reduction));
 
@@ -649,13 +684,39 @@ const GameCanvas: React.FC = () => {
           ay += (height / 2 - f.y) * 0.0001;
         }
 
+        // --- Personality Traits Influence ---
+        if (f.personality === FishPersonality.HYPER) {
+           ax *= 1.5;
+           ay *= 1.5;
+           if (Math.random() < 0.05) { // Erratic movements
+             ax += (Math.random() - 0.5) * 0.5;
+             ay += (Math.random() - 0.5) * 0.5;
+           }
+        } else if (f.personality === FishPersonality.RELAXED) {
+           ax *= 0.7;
+           ay *= 0.7;
+        } else if (f.personality === FishPersonality.SHY) {
+           // Avoid center
+           const centerX = width / 2;
+           const centerY = height / 2;
+           const distToCenter = Math.hypot(f.x - centerX, f.y - centerY);
+           if (distToCenter < 200) {
+              ax += (f.x - centerX) * 0.0005; // Push away from center
+              ay += (f.y - centerY) * 0.0005;
+           }
+        }
+
         // Apply Acceleration
         f.vx += ax;
         f.vy += ay;
 
         // Limit Speed
         const speed = Math.hypot(f.vx, f.vy);
-        const maxSpeed = ((f.state === 'SEEKING_FOOD' || f.state === 'FLEEING') ? species.speed * 2 : species.speed);
+        let maxSpeed = ((f.state === 'SEEKING_FOOD' || f.state === 'FLEEING') ? species.speed * 2 : species.speed);
+
+        if (f.personality === FishPersonality.HYPER) maxSpeed *= 1.3;
+        if (f.personality === FishPersonality.RELAXED) maxSpeed *= 0.8;
+
         if (speed > maxSpeed) {
           f.vx = (f.vx / speed) * maxSpeed;
           f.vy = (f.vy / speed) * maxSpeed;
