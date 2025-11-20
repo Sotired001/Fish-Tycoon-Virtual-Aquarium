@@ -35,6 +35,18 @@ export interface EntityFish {
   parents?: [string, string]; // IDs of parents
   lastBreedTime?: number; // Timestamp of last successful breeding
   disease?: 'ICH' | 'FUNGUS' | 'PARASITE'; // Disease type if infected
+  name?: string; // Custom or generated name
+  isFavorite?: boolean; // Prevent selling
+}
+
+export interface FloatingText {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number; // 1.0 to 0
+  vy: number;
 }
 
 export interface MedicineItem {
@@ -112,7 +124,7 @@ export interface EntityParticle {
   vy: number;
   life: number; // 0-1
   size: number;
-  type: 'BUBBLE' | 'SPARKLE';
+  type: 'BUBBLE' | 'SPARKLE' | 'LEAF';
 }
 
 export interface Achievement {

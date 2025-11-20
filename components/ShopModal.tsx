@@ -14,10 +14,13 @@ const ShopModal: React.FC = () => {
     toggleShop,
     isShopOpen,
     treatFish,
-    sellFish
+    sellFish,
+    skills
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState<'FISH' | 'UPGRADES' | 'DECOR' | 'MY_TANK'>('FISH');
+  const [sortOrder, setSortOrder] = useState<'PRICE_ASC' | 'PRICE_DESC' | 'NAME'>('PRICE_ASC');
+  const [filterType, setFilterType] = useState<string>('ALL');
 
   if (!isShopOpen) return null;
 
@@ -35,7 +38,22 @@ const ShopModal: React.FC = () => {
             <h2 className="text-2xl font-bold text-amber-400">Aquarium Shop</h2>
             <p className="text-sm text-slate-400">Balance: <span className="text-amber-400 font-mono text-lg">${money.toLocaleString()}</span></p>
           </div>
-          <button onClick={toggleShop} className="text-slate-400 hover:text-white text-2xl">&times;</button>
+          <div className="flex items-center gap-4">
+             {(activeTab === 'FISH' || activeTab === 'DECOR') && (
+               <>
+                 <select
+                   value={sortOrder}
+                   onChange={(e) => setSortOrder(e.target.value as any)}
+                   className="bg-slate-800 text-xs text-slate-300 p-2 rounded border border-slate-600"
+                 >
+                    <option value="PRICE_ASC">Price: Low to High</option>
+                    <option value="PRICE_DESC">Price: High to Low</option>
+                    <option value="NAME">Name</option>
+                 </select>
+               </>
+             )}
+             <button onClick={toggleShop} className="text-slate-400 hover:text-white text-2xl">&times;</button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -115,7 +133,13 @@ const ShopModal: React.FC = () => {
 
           {activeTab === 'FISH' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {FISH_SPECIES.map(fish => {
+              {[...FISH_SPECIES]
+                .sort((a, b) => {
+                   if (sortOrder === 'PRICE_ASC') return a.cost - b.cost;
+                   if (sortOrder === 'PRICE_DESC') return b.cost - a.cost;
+                   return a.name.localeCompare(b.name);
+                })
+                .map(fish => {
                 const ownedCount = ownedFish.filter(f => f.speciesId === fish.id).length;
                 const canAfford = money >= fish.cost;
                 const isFull = currentFishCount >= maxFish;
@@ -160,7 +184,13 @@ const ShopModal: React.FC = () => {
 
           {activeTab === 'DECOR' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {DECORATIONS.map(item => {
+              {[...DECORATIONS]
+                .sort((a, b) => {
+                   if (sortOrder === 'PRICE_ASC') return a.cost - b.cost;
+                   if (sortOrder === 'PRICE_DESC') return b.cost - a.cost;
+                   return a.name.localeCompare(b.name);
+                })
+                .map(item => {
                 const canAfford = money >= item.cost;
 
                 return (

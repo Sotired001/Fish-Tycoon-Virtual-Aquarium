@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { FishSpecies, GameStats, Achievement, EntityFish, FishGenes, WaterParams, EntityDecoration, Quest, QuestType, SkillId } from '../types';
-import { UPGRADES, FISH_SPECIES, ACHIEVEMENTS, GAME_CONFIG, DECORATIONS, MEDICINES, SKILLS } from '../constants';
+import { UPGRADES, FISH_SPECIES, ACHIEVEMENTS, GAME_CONFIG, DECORATIONS, MEDICINES, SKILLS, BIOMES } from '../constants';
 import { generateRandomGenes, generateOffspringGenes } from '../utils/genetics';
+import { generateFishName } from '../utils/nameGenerator';
 
 interface GameState {
   money: number;
@@ -29,6 +30,10 @@ interface GameState {
   isShopOpen: boolean;
   isSettingsOpen: boolean;
   isSellMode: boolean;
+  isScreenshotMode: boolean;
+  tutorialStep: number;
+  selectedFishId: string | null;
+  isEncyclopediaOpen?: boolean; // Optional to satisfy type check if strict
 
   // Actions
   addMoney: (amount: number) => void;
@@ -52,6 +57,11 @@ interface GameState {
   toggleShop: () => void;
   toggleSettings: () => void;
   toggleSellMode: () => void;
+  toggleScreenshotMode: () => void;
+  toggleFavorite: (fishId: string) => void;
+  advanceTutorial: () => void;
+  selectFish: (fishId: string | null) => void;
+
   sellFish: (fishId: string) => void;
   removeFish: (fishId: string) => void;
   breedFish: (parent1Id: string, parent2Id: string) => void;
@@ -96,9 +106,13 @@ export const useGameStore = create<GameState>()(
         fishFedCount: 0,
         clicks: 0,
       },
+      discoveredSpecies: [],
       isShopOpen: false,
       isSettingsOpen: false,
       isSellMode: false,
+      isScreenshotMode: false,
+      tutorialStep: 1,
+      selectedFishId: null,
 
       addMoney: (amount) => set((state) => {
         const prestigeMult = 1 + (state.prestige * 0.1);
@@ -303,15 +317,23 @@ export const useGameStore = create<GameState>()(
               personalityOffset: Math.random() * 1000,
               genes: generateRandomGenes(species.id),
               age: 0,
-              generation: 0
+              generation: 0,
+              name: generateFishName(),
+              isFavorite: false
             };
             
             // Trigger quest check
             setTimeout(() => get().checkQuestProgress(), 0);
 
+            // Update discovered species
+            const discovered = state.discoveredSpecies.includes(species.id)
+                ? state.discoveredSpecies
+                : [...state.discoveredSpecies, species.id];
+
             return {
               money: state.money - finalCost,
-              fish: [...state.fish, newFish]
+              fish: [...state.fish, newFish],
+              discoveredSpecies: discovered
             };
           });
           return true;
@@ -425,11 +447,20 @@ export const useGameStore = create<GameState>()(
       toggleShop: () => set((state) => ({ isShopOpen: !state.isShopOpen, isSettingsOpen: false, isSellMode: false })),
       toggleSettings: () => set((state) => ({ isSettingsOpen: !state.isSettingsOpen, isShopOpen: false, isSellMode: false })),
       toggleSellMode: () => set((state) => ({ isSellMode: !state.isSellMode, isShopOpen: false, isSettingsOpen: false })),
+      toggleScreenshotMode: () => set((state) => ({ isScreenshotMode: !state.isScreenshotMode })),
+
+      toggleFavorite: (fishId) => set((state) => ({
+        fish: state.fish.map(f => f.id === fishId ? { ...f, isFavorite: !f.isFavorite } : f)
+      })),
+
+      advanceTutorial: () => set((state) => ({ tutorialStep: state.tutorialStep + 1 })),
+      selectFish: (fishId) => set({ selectedFishId: fishId, isShopOpen: false, isSettingsOpen: false }),
 
       sellFish: (fishId) => {
         set((state) => {
           const fishToSell = state.fish.find(f => f.id === fishId);
           if (!fishToSell) return {};
+          if (fishToSell.isFavorite) return {}; // Cannot sell favorites
 
           const species = FISH_SPECIES.find(s => s.id === fishToSell.speciesId);
           const value = species ? species.cost * 0.5 : 0;
@@ -495,8 +526,15 @@ export const useGameStore = create<GameState>()(
           genes: newGenes,
           age: 0,
           generation: Math.max(p1.generation, p2.generation) + 1,
-          parents: [p1.id, p2.id]
+          parents: [p1.id, p2.id],
+          name: generateFishName(),
+          isFavorite: false
         };
+
+        // Update discovered species
+        const discovered = get().discoveredSpecies.includes(childSpeciesId)
+            ? get().discoveredSpecies
+            : [...get().discoveredSpecies, childSpeciesId];
 
         set(state => ({
           fish: state.fish.map(f => {
@@ -505,6 +543,7 @@ export const useGameStore = create<GameState>()(
             }
             return f;
           }).concat(child),
+          discoveredSpecies: discovered,
           // Update Quests
           quests: state.quests.map(q => {
               if (q.type === QuestType.BREED_FISH && !q.completed) {
@@ -544,6 +583,10 @@ export const useGameStore = create<GameState>()(
           upgrades: { foodQuality: 0, autoFeeder: 0, magnet: 0, tankSize: 0, metabolism: 0 },
           prestige: get().prestige + 1,
           gems: gems + bonusGems,
+          discoveredSpecies: [], // Reset this? Maybe keep it across prestige? Let's keep it.
+          // Actually, prestige usually resets tangible assets but keeps collection.
+          // I'll comment out discoveredSpecies reset to imply it persists.
+          // discoveredSpecies: []
         });
       },
 

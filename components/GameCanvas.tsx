@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useGameStore } from '../services/store';
-import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet } from '../types';
+import { EntityFish, EntityFood, EntityCoin, EntityParticle, FishSpecies, EntityDecoration, SkillId, FishDiet, FloatingText } from '../types';
 import { FISH_SPECIES, GAME_CONFIG, UPGRADES, DECORATIONS, BIOMES, SKILLS } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -20,12 +20,14 @@ const GameCanvas: React.FC = () => {
     currentBiomeId,
     incrementStat,
     isSellMode,
+    isScreenshotMode,
     sellFish,
     removeFish,
     waterParams,
     updateWaterParams,
     timeOfDay,
-    setTimeOfDay
+    setTimeOfDay,
+    selectFish
   } = useGameStore();
 
   // Use refs for high-frequency game entities to avoid React re-renders
@@ -34,6 +36,7 @@ const GameCanvas: React.FC = () => {
   const foodRef = useRef<EntityFood[]>([]);
   const coinsRef = useRef<EntityCoin[]>([]);
   const particlesRef = useRef<EntityParticle[]>([]);
+  const floatingTextRef = useRef<FloatingText[]>([]);
   const waterParamsRef = useRef({ ...waterParams }); // Local ref for simulation
   const timeOfDayRef = useRef(timeOfDay);
 
@@ -125,6 +128,17 @@ const GameCanvas: React.FC = () => {
     });
   };
 
+  const spawnFloatingText = (x: number, y: number, text: string, color: string) => {
+    floatingTextRef.current.push({
+      id: uuidv4(),
+      x, y,
+      text,
+      color,
+      life: 1.0,
+      vy: -0.5
+    });
+  };
+
   const dropFood = (x: number, y: number) => {
     const quality = upgradesRef.current.foodQuality || 0;
     foodRef.current.push({
@@ -160,7 +174,15 @@ const GameCanvas: React.FC = () => {
       if (clickedFish) {
         sellFish(clickedFish.id);
         spawnParticle(clickedFish.x, clickedFish.y, 'SPARKLE');
+        spawnFloatingText(clickedFish.x, clickedFish.y, 'SOLD', '#ef4444');
       }
+      return;
+    }
+
+    // Select fish?
+    const clickedFish = fishRef.current.find(f => Math.hypot(f.x - x, f.y - y) < 30 * f.scale);
+    if (clickedFish) {
+      selectFish(clickedFish.id);
       return;
     }
 
@@ -284,7 +306,11 @@ const GameCanvas: React.FC = () => {
       const time = timeOfDayRef.current;
       let darkness = 0.0;
 
-      // Night is 20:00 to 06:00
+      if (isScreenshotMode) {
+        // No darkness in screenshot mode for better visibility
+        darkness = 0;
+      } else {
+        // Night is 20:00 to 06:00
       // Twilight 06:00-08:00 and 18:00-20:00
       if (time >= 6 && time < 8) {
          // Dawn
@@ -298,6 +324,8 @@ const GameCanvas: React.FC = () => {
       } else {
          // Night
          darkness = 0.5;
+      }
+
       }
 
       if (darkness > 0) {
@@ -328,14 +356,21 @@ const GameCanvas: React.FC = () => {
         }
       });
 
-      // 2. Handle Auto Feeder
+      // 2. Handle Auto Feeder (Smart)
       const autoFeederLevel = upgradesRef.current.autoFeeder || 0;
       if (autoFeederLevel > 0) {
         autoFeederTimerRef.current += deltaTime;
         const interval = UPGRADES.autoFeeder.effect(autoFeederLevel) * 1000;
         if (autoFeederTimerRef.current > interval) {
           autoFeederTimerRef.current = 0;
-          dropFood(Math.random() * width, 20);
+
+          // Smart Feeding: Find a hungry fish
+          const hungryFish = fishRef.current.find(f => f.hunger < 50);
+          if (hungryFish) {
+            dropFood(hungryFish.x, 20); // Drop above them
+          } else {
+            dropFood(Math.random() * width, 20);
+          }
         }
       }
 
@@ -620,6 +655,7 @@ const GameCanvas: React.FC = () => {
 
               spawnCoin(f.x, f.y, species.baseValue);
               spawnParticle(f.x, f.y, 'BUBBLE');
+              spawnFloatingText(f.x, f.y, 'Yum!', '#86efac');
               incrementStat('fishFedCount');
             }
           }
@@ -657,9 +693,23 @@ const GameCanvas: React.FC = () => {
       }
 
       // 6. Update & Draw Coins
+      // Mouse Pos for Magnet
+      // Since we don't track mouse pos globally in ref, let's assume magnet pulls up to the surface (y=0) where user "collects"
+      // Actually, classic magnet usually pulls to cursor. But we only get cursor on click/move.
+      // For simplicity in this engine, let's stick to "Magnet pulls UP to collection zone" which is what the previous code did (vy -= 0.05).
+      // Let's add the VISUAL (lines)
+
       coinsRef.current = coinsRef.current.filter(c => !c.collected && c.y < height + 50);
       coinsRef.current.forEach(c => {
         if (magnetLvl > 0) {
+           // Visual: Draw faint line to top
+           ctx.beginPath();
+           ctx.moveTo(c.x, c.y);
+           ctx.lineTo(c.x, 0);
+           ctx.strokeStyle = `rgba(255, 215, 0, ${0.1 * magnetLvl})`;
+           ctx.lineWidth = 1;
+           ctx.stroke();
+
           c.vy -= (magnetLvl * 0.05);
         } else {
           c.vy += GAME_CONFIG.GRAVITY * 0.5;
@@ -678,10 +728,28 @@ const GameCanvas: React.FC = () => {
           c.collected = true;
           addMoney(c.value);
           spawnParticle(c.x, c.y, 'SPARKLE');
+          spawnFloatingText(c.x, 50, `+${c.value}`, '#fbbf24');
         }
 
         ctx.font = "24px serif";
         ctx.fillText('🪙', c.x, c.y);
+      });
+
+      // 7. Floating Text
+      floatingTextRef.current = floatingTextRef.current.filter(ft => ft.life > 0);
+      floatingTextRef.current.forEach(ft => {
+          ft.y += ft.vy;
+          ft.life -= 0.02;
+
+          ctx.save();
+          ctx.globalAlpha = ft.life;
+          ctx.fillStyle = ft.color;
+          ctx.font = "bold 20px Arial";
+          ctx.strokeStyle = 'black';
+          ctx.lineWidth = 2;
+          ctx.strokeText(ft.text, ft.x, ft.y);
+          ctx.fillText(ft.text, ft.x, ft.y);
+          ctx.restore();
       });
 
       // Sell Mode Overlay (Cursor)

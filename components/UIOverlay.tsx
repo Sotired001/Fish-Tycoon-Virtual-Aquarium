@@ -6,6 +6,8 @@ import WaterMonitor from './WaterMonitor';
 import QuestBoard from './QuestBoard';
 import SkillTreeModal from './SkillTreeModal';
 import BiomeModal from './BiomeModal';
+import EncyclopediaModal from './EncyclopediaModal';
+import StatisticsModal from './StatisticsModal';
 
 const UIOverlay: React.FC = () => {
   const {
@@ -16,25 +18,22 @@ const UIOverlay: React.FC = () => {
     prestige,
     prestigeReset,
     isSellMode,
-    toggleSellMode
+    toggleSellMode,
+    toggleScreenshotMode
   } = useGameStore();
 
   const [lastAchievement, setLastAchievement] = useState<string | null>(null);
   const [isBreedingModalOpen, setIsBreedingModalOpen] = useState<boolean>(false);
   const [isSkillModalOpen, setIsSkillModalOpen] = useState<boolean>(false);
   const [isBiomeModalOpen, setIsBiomeModalOpen] = useState<boolean>(false);
+  const [isEncyclopediaOpen, setIsEncyclopediaOpen] = useState<boolean>(false);
+  const [isStatsOpen, setIsStatsOpen] = useState<boolean>(false);
 
-  const toggleBreedingModal = () => {
-    setIsBreedingModalOpen(!isBreedingModalOpen);
-  };
-
-  const toggleSkillModal = () => {
-    setIsSkillModalOpen(!isSkillModalOpen);
-  };
-
-  const toggleBiomeModal = () => {
-    setIsBiomeModalOpen(!isBiomeModalOpen);
-  };
+  const toggleBreedingModal = () => setIsBreedingModalOpen(!isBreedingModalOpen);
+  const toggleSkillModal = () => setIsSkillModalOpen(!isSkillModalOpen);
+  const toggleBiomeModal = () => setIsBiomeModalOpen(!isBiomeModalOpen);
+  const toggleEncyclopedia = () => setIsEncyclopediaOpen(!isEncyclopediaOpen);
+  const toggleStats = () => setIsStatsOpen(!isStatsOpen);
 
   useEffect(() => {
     if (achievements.length > 0) {
@@ -113,22 +112,36 @@ const UIOverlay: React.FC = () => {
             <span className="text-xs font-bold">THEMES</span>
           </button>
 
-          <button
-            onClick={toggleSellMode}
-            className={`p-4 rounded-2xl shadow-lg transition-transform active:scale-95 flex flex-col items-center justify-center min-w-[80px] ${isSellMode
-              ? 'bg-red-500 text-white shadow-red-500/30 animate-pulse'
-              : 'bg-white/10 hover:bg-white/20 text-white backdrop-blur'
-              }`}
-          >
-            <span className="text-2xl mb-1">{isSellMode ? '🚫' : '💰'}</span>
-            <span className="text-xs font-bold">{isSellMode ? 'CANCEL' : 'SELL'}</span>
-          </button>
+          <div className="flex flex-col gap-2">
+            <div className="flex gap-2">
+              <button onClick={toggleEncyclopedia} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-xl shadow-lg min-w-[40px]" title="Encyclopedia">
+                📖
+              </button>
+              <button onClick={toggleStats} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-xl shadow-lg min-w-[40px]" title="Statistics">
+                📊
+              </button>
+              <button onClick={toggleScreenshotMode} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-xl shadow-lg min-w-[40px]" title="Screenshot Mode">
+                📸
+              </button>
+            </div>
+
+            <button
+              onClick={toggleSellMode}
+              className={`p-2 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 ${isSellMode
+                ? 'bg-red-500 text-white shadow-red-500/30 animate-pulse'
+                : 'bg-red-900/50 hover:bg-red-800/80 text-white backdrop-blur'
+                }`}
+            >
+              <span className="text-xl">{isSellMode ? '🚫' : '💰'}</span>
+              <span className="text-xs font-bold">{isSellMode ? 'CANCEL' : 'SELL'}</span>
+            </button>
+          </div>
 
           <button
             onClick={() => {
               if (window.confirm("Reset progress for Prestige bonus?")) prestigeReset();
             }}
-            className="bg-purple-600/80 hover:bg-purple-600 text-white p-2 rounded-xl text-xs font-bold backdrop-blur"
+            className="bg-purple-600/80 hover:bg-purple-600 text-white p-2 rounded-xl text-xs font-bold backdrop-blur self-start"
           >
             Prestige
           </button>
@@ -151,6 +164,8 @@ const UIOverlay: React.FC = () => {
       <BreedingTankModal isOpen={isBreedingModalOpen} onClose={toggleBreedingModal} />
       <SkillTreeModal isOpen={isSkillModalOpen} onClose={toggleSkillModal} />
       <BiomeModal isOpen={isBiomeModalOpen} onClose={toggleBiomeModal} />
+      {isEncyclopediaOpen && <EncyclopediaModal onClose={toggleEncyclopedia} />}
+      {isStatsOpen && <StatisticsModal onClose={toggleStats} />}
     </div>
   );
 };
