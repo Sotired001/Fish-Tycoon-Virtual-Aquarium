@@ -113,12 +113,12 @@ const GameCanvas: React.FC = () => {
     });
   };
 
-  const spawnParticle = (x: number, y: number, type: 'BUBBLE' | 'SPARKLE' | 'LEAF') => {
+  const spawnParticle = (x: number, y: number, type: 'BUBBLE' | 'SPARKLE' | 'LEAF' | 'BONE') => {
     particlesRef.current.push({
       id: uuidv4(),
       x, y,
       vx: (Math.random() - 0.5) * 1,
-      vy: type === 'BUBBLE' ? -2 : type === 'LEAF' ? 0.5 : -1,
+      vy: type === 'BUBBLE' ? -2 : type === 'LEAF' || type === 'BONE' ? 0.5 : -1,
       life: 1,
       size: Math.random() * 5 + 2,
       type: type as any
@@ -231,6 +231,17 @@ const GameCanvas: React.FC = () => {
       ctx.fillStyle = 'lime';
       ctx.font = '12px Arial';
       ctx.fillText('Sick', -10, -25);
+    }
+
+    // Hunting/Fleeing Indicator
+    if (f.currentAction === 'HUNTING') {
+      ctx.fillStyle = 'red';
+      ctx.font = '16px Arial';
+      ctx.fillText('⚔️', -8, -30);
+    } else if (f.currentAction === 'FLEEING') {
+      ctx.fillStyle = 'white';
+      ctx.font = '16px Arial';
+      ctx.fillText('💨', -8, -30);
     }
 
     ctx.restore();
@@ -401,6 +412,10 @@ const GameCanvas: React.FC = () => {
           ctx.fillStyle = '#4ade80';
           ctx.font = `${p.size * 2}px serif`;
           ctx.fillText('🍂', p.x, p.y);
+        } else if ((p.type as any) === 'BONE') {
+          ctx.fillStyle = '#e5e7eb'; // Gray-200
+          ctx.font = `${p.size * 2}px serif`;
+          ctx.fillText('🦴', p.x, p.y);
         }
       });
       ctx.restore();
@@ -540,6 +555,7 @@ const GameCanvas: React.FC = () => {
           if (nearestPrey) {
             hunting = true;
             f.state = 'SEEKING_FOOD'; // Reuse state for animation speed
+            f.currentAction = 'HUNTING';
             const prey = nearestPrey as EntityFish;
             const angle = Math.atan2(prey.y - f.y, prey.x - f.x);
             ax += Math.cos(angle) * 0.3; // Chase fast
@@ -554,7 +570,8 @@ const GameCanvas: React.FC = () => {
               if (idx > -1) fishRef.current.splice(idx, 1);
 
               f.hunger = 100;
-              spawnParticle(f.x, f.y, 'LEAF'); // Use LEAF as blood/mess for now, or maybe just bubbles
+              f.currentAction = 'NONE';
+              spawnParticle(f.x, f.y, 'BONE');
               spawnParticle(f.x, f.y, 'BUBBLE');
               incrementStat('fishFedCount'); // Counts as feeding? Sure.
             }
@@ -564,6 +581,7 @@ const GameCanvas: React.FC = () => {
         // --- Phase 2: Fleeing Logic (Prey Avoidance) ---
         let fleeing = false;
         if (!hunting) {
+            f.currentAction = 'NONE'; // Reset if not hunting
             // Look for predators nearby
             fishRef.current.forEach(p => {
                const predatorSpecies = FISH_SPECIES.find(s => s.id === p.speciesId);
@@ -572,6 +590,7 @@ const GameCanvas: React.FC = () => {
                    if (dist < 200) { // Fear radius
                        fleeing = true;
                        f.state = 'FLEEING';
+                       f.currentAction = 'FLEEING';
                        // Run away!
                        const angle = Math.atan2(p.y - f.y, p.x - f.x);
                        ax -= Math.cos(angle) * 0.4; // Flee fast
